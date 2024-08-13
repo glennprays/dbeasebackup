@@ -1,0 +1,41 @@
+# Exclude the .env file from the build context (optional, since we copy it explicitly)
+.env
+
+# Exclude the Dockerfile itself
+Dockerfile
+
+# Exclude version control directories and files
+.git
+.gitignore
+
+# Exclude Go binary files
+
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+
+
+# Exclude build directories and files
+/build
+/bin
+/tmp
+/vendor
+
+# Exclude editor and IDE files
+
+*.swp
+
+*~
+*.sublime-project
+
+*.sublime-workspace
+.vscode
+
+# Exclude dependency directories and files
+node_modules
+
+# Exclude logs and temporary files
+*.log
+*.tmp

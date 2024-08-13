@@ -1,7 +1,7 @@
 services:
   db-auto-backup:
-    image: glennprays/database-auto-backup
-    container_name: db-auto-backup
+    image: glennprays/dbeasebackup:latest
+    container_name: dbeasebackup-container
     env_file:
       - .env
     volumes:

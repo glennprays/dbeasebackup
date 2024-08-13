@@ -9,7 +9,7 @@ import (
 	"os/exec"
 	"time"
 
-	"github.com/glennprays/database-auto-backup/pkg"
+	"github.com/glennprays/dbeasebackup/pkg"
 	"github.com/robfig/cron/v3"
 )
 

@@ -42,6 +42,7 @@ node_modules
 
 # Exclude backup files
 /backups
-
+/img
 # Exclude google service account key
 service-account-key.json
+

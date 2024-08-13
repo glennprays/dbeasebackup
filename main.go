@@ -5,8 +5,8 @@ import (
 	"log"
 	"os"
 
-	"github.com/glennprays/database-auto-backup/pkg"
-	service "github.com/glennprays/database-auto-backup/services"
+	"github.com/glennprays/dbeasebackup/pkg"
+	service "github.com/glennprays/dbeasebackup/services"
 	"github.com/joho/godotenv"
 )
 

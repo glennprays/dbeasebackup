@@ -1,4 +1,4 @@
-module github.com/glennprays/database-auto-backup
+module github.com/glennprays/dbeasebackup
 
 go 1.22.4
 

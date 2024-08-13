@@ -1,0 +1,11 @@
+pre-commit:
+  commands:
+    go-tidy:
+      run: go mod tidy
+    go-vet:
+      run: go vet ./...
+    golangci-lint:
+      run: golangci-lint run
+    go-test:
+      run: go test ./...
+

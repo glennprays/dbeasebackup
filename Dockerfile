@@ -14,10 +14,12 @@ RUN CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -o /app/main ./main.go
 # Stage 2: Create the final image
 FROM alpine:latest
 # Install the PostgreSQL client (which includes pg_dump)
-RUN apk --no-cache add postgresql-client=${PG_VERSION}-r0
+RUN apk --no-cache add postgresql-client
 # Copy the compiled Go binary from the build stage
 COPY --from=builder /app/main /main
 # Set the working directory
 WORKDIR /
+# Set the environment variable to production
+ENV GO_ENV=production
 # Command to run the Go application
 CMD ["/main"]

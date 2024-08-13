@@ -1,0 +1,25 @@
+name: Build Docker Image
+
+on:
+    push:
+        branches: ['main']
+
+jobs:
+    build:
+        runs-on: ubuntu-latest
+        env:
+            DOCKER_USERNAME: ${{ secrets.DOCKER_USERNAME }}
+            DOCKER_PASSWORD: ${{ secrets.DOCKER_PASSWORD }}
+
+        steps:
+            - name: Checkout code
+              uses: actions/checkout@v3
+
+            - name: Login to Dockerhub
+              run: echo "${DOCKER_PASSWORD}" | docker login -u "${DOCKER_USERNAME}" --password-stdin
+
+            - name: Build Docker image
+              run: docker build -t "${DOCKER_USERNAME}/${DOCKER_IMAGE}" .
+
+            - name: Push to Dockerhub
+              run: docker push "${DOCKER_USERNAME}/database-auto-backup:latest"

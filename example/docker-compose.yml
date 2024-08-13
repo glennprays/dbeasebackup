@@ -1,0 +1,13 @@
+services:
+  db-auto-backup:
+    image: glennprays/database-auto-backup
+    container_name: db-auto-backup
+    env_file:
+      - .env
+    volumes:
+      - ./service-account-key.json:/service-account-key.json
+    network_mode: host
+
+
+
+  

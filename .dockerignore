@@ -39,3 +39,9 @@ node_modules
 # Exclude logs and temporary files
 *.log
 *.tmp
+
+# Exclude backup files
+/backups
+
+# Exclude google service account key
+service-account-key.json

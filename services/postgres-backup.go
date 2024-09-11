@@ -7,6 +7,7 @@ import (
 	"log"
 	"os"
 	"os/exec"
+	"runtime"
 	"time"
 
 	"github.com/glennprays/dbeasebackup/pkg"
@@ -155,6 +156,9 @@ func (p *postgresBackup) BackupDatabaseWithCRON(ctx context.Context, cronExpress
 		if err != nil {
 			log.Printf("unable to backup database: %v", err)
 		}
+		log.Println("Running GC")
+		runtime.GC()
+		log.Println("GC completed")
 		fmt.Println("******* Backup completed")
 	})
 

@@ -60,6 +60,16 @@ func main() {
 		log.String("provider", backupProvider.Name()),
 	)
 
+	// Validate backup provider dependencies
+	if err := backupProvider.ValidateDependencies(); err != nil {
+		logger.Error(traceID, "Backup provider dependency validation failed", nil, log.Error(err))
+		os.Exit(1)
+	}
+
+	logger.Info(traceID, "Backup provider dependencies validated", nil,
+		log.String("provider", backupProvider.Name()),
+	)
+
 	// Initialize storage
 	storageProvider, err := initializeStorage(context.Background(), cfg, logger)
 	if err != nil {

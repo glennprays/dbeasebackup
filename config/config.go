@@ -15,7 +15,7 @@ import (
 // Config holds all configuration for the application with flat structure
 type Config struct {
 	// App
-	ENV string `mapstructure:"ENV" default:"development"`
+	ENV string `mapstructure:"ENV" default:"production"`
 
 	// Backup Provider
 	BACKUP_PROVIDER string `mapstructure:"BACKUP_PROVIDER" default:"postgres"`

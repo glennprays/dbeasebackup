@@ -12,4 +12,7 @@ type Provider interface {
 
 	// Cleanup removes temporary files after backup
 	Cleanup(filePath string) error
+
+	// ValidateDependencies checks if required external tools are available
+	ValidateDependencies() error
 }

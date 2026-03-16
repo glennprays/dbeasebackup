@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/glennprays/log"
+	"github.com/google/uuid"
 )
 
 // PostgresConfig holds PostgreSQL-specific configuration
@@ -40,7 +41,7 @@ func (p *PostgresProvider) Name() string {
 
 // Dump creates a pg_dump backup file
 func (p *PostgresProvider) Dump(ctx context.Context, backupDir string) (string, error) {
-	traceID := "postgres-dump"
+	traceID := uuid.New().String()
 
 	backupTime := time.Now()
 	backupFile := fmt.Sprintf("backup_%s.tar", backupTime.Format("2006-01-02_15-04-05"))
@@ -87,6 +88,15 @@ func (p *PostgresProvider) Dump(ctx context.Context, backupDir string) (string, 
 func (p *PostgresProvider) Cleanup(filePath string) error {
 	if err := os.Remove(filePath); err != nil {
 		return fmt.Errorf("unable to cleanup backup file: %w", err)
+	}
+	return nil
+}
+
+// ValidateDependencies checks if pg_dump is available in PATH
+func (p *PostgresProvider) ValidateDependencies() error {
+	_, err := exec.LookPath("pg_dump")
+	if err != nil {
+		return fmt.Errorf("pg_dump not found in PATH: please install PostgreSQL client tools (postgresql-client on Debian/Ubuntu, postgresql on macOS)")
 	}
 	return nil
 }

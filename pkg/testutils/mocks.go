@@ -114,9 +114,10 @@ func (m *MockStorage) Health(ctx context.Context) error {
 
 // MockProvider implements backup.Provider interface
 type MockProvider struct {
-	NameFunc    func() string
-	DumpFunc    func(ctx context.Context, backupDir string) (string, error)
-	CleanupFunc func(filePath string) error
+	NameFunc                 func() string
+	DumpFunc                 func(ctx context.Context, backupDir string) (string, error)
+	CleanupFunc              func(filePath string) error
+	ValidateDependenciesFunc func() error
 }
 
 func (m *MockProvider) Name() string {
@@ -136,6 +137,13 @@ func (m *MockProvider) Dump(ctx context.Context, backupDir string) (string, erro
 func (m *MockProvider) Cleanup(filePath string) error {
 	if m.CleanupFunc != nil {
 		return m.CleanupFunc(filePath)
+	}
+	return nil
+}
+
+func (m *MockProvider) ValidateDependencies() error {
+	if m.ValidateDependenciesFunc != nil {
+		return m.ValidateDependenciesFunc()
 	}
 	return nil
 }

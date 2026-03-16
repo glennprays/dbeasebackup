@@ -13,12 +13,12 @@ import (
 // PostgresDatabase implements the Database interface for PostgreSQL
 type PostgresDatabase struct {
 	db     *sql.DB
-	cfg    *config.DatabaseConfig
+	cfg    *config.Config
 	logger *log.Logger
 }
 
 // NewPostgresDatabase creates a new PostgreSQL database instance
-func NewPostgresDatabase(cfg *config.DatabaseConfig, logger *log.Logger) *PostgresDatabase {
+func NewPostgresDatabase(cfg *config.Config, logger *log.Logger) *PostgresDatabase {
 	return &PostgresDatabase{
 		cfg:    cfg,
 		logger: logger,
@@ -31,7 +31,7 @@ func (p *PostgresDatabase) Connect(ctx context.Context) error {
 
 	connStr := fmt.Sprintf(
 		"host=%s port=%s user=%s password=%s dbname=%s sslmode=disable",
-		p.cfg.Host, p.cfg.Port, p.cfg.User, p.cfg.Password, p.cfg.Database,
+		p.cfg.PG_HOST, p.cfg.PG_PORT, p.cfg.PG_USER, p.cfg.PG_PASSWORD, p.cfg.PG_DATABASE,
 	)
 
 	db, err := sql.Open("postgres", connStr)
@@ -47,8 +47,8 @@ func (p *PostgresDatabase) Connect(ctx context.Context) error {
 
 	p.db = db
 	p.logger.Info(traceID, "Database connection established", nil,
-		log.String("host", p.cfg.Host),
-		log.String("database", p.cfg.Database),
+		log.String("host", p.cfg.PG_HOST),
+		log.String("database", p.cfg.PG_DATABASE),
 	)
 
 	return nil

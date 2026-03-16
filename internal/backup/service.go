@@ -5,11 +5,11 @@ import (
 	"fmt"
 	"io"
 	"os"
-	"os/exec"
 	"runtime"
 	"time"
 
 	"github.com/glennprays/dbeasebackup/config"
+	backupprovider "github.com/glennprays/dbeasebackup/pkg/backup"
 	"github.com/glennprays/dbeasebackup/pkg/database"
 	"github.com/glennprays/dbeasebackup/pkg/storage"
 	"github.com/glennprays/log"
@@ -17,21 +17,23 @@ import (
 
 // Service implements the backup orchestration
 type Service struct {
-	db      database.Database
-	storage storage.Storage
-	cfg     *config.Config
-	logger  *log.Logger
+	db       database.Database
+	storage  storage.Storage
+	provider backupprovider.Provider
+	cfg      *config.Config
+	logger   *log.Logger
 }
 
 // NewService creates a new backup service
-func NewService(db database.Database, storage storage.Storage, cfg *config.Config, logger *log.Logger) (*Service, error) {
+func NewService(db database.Database, storage storage.Storage, provider backupprovider.Provider, cfg *config.Config, logger *log.Logger) (*Service, error) {
 	traceID := "backup-service-init"
 
 	s := &Service{
-		db:      db,
-		storage: storage,
-		cfg:     cfg,
-		logger:  logger,
+		db:       db,
+		storage:  storage,
+		provider: provider,
+		cfg:      cfg,
+		logger:   logger,
 	}
 
 	// Ensure the backup table exists
@@ -40,13 +42,15 @@ func NewService(db database.Database, storage storage.Storage, cfg *config.Confi
 		return nil, fmt.Errorf("unable to ensure backup table exists: %w", err)
 	}
 
-	logger.Info(traceID, "Backup service initialized", nil)
+	logger.Info(traceID, "Backup service initialized", nil,
+		log.String("provider", provider.Name()),
+	)
 	return s, nil
 }
 
 // Name returns the name of the job (implements scheduler.Job interface)
 func (s *Service) Name() string {
-	return "postgres-backup"
+	return s.provider.Name()
 }
 
 // Execute runs the backup job (implements scheduler.Job interface)
@@ -60,11 +64,13 @@ func (s *Service) Backup(ctx context.Context) error {
 
 	s.logger.Info(traceID, "Starting backup", nil)
 
-	// Create the backup dump
-	backupFile, backupTime, err := s.createDump(ctx, traceID)
+	// Create the backup dump using provider
+	backupFile, err := s.provider.Dump(ctx, s.cfg.BACKUP_DIR)
 	if err != nil {
 		return err
 	}
+
+	backupTime := time.Now()
 
 	// Record the backup in the database
 	if err := s.recordBackup(ctx, traceID, backupFile, backupTime); err != nil {
@@ -86,49 +92,6 @@ func (s *Service) Backup(ctx context.Context) error {
 
 	s.logger.Info(traceID, "Backup completed successfully", nil)
 	return nil
-}
-
-// createDump creates a pg_dump backup file
-func (s *Service) createDump(ctx context.Context, traceID string) (string, time.Time, error) {
-	backupTime := time.Now()
-	backupFile := fmt.Sprintf("backup_%s.tar", backupTime.Format("2006-01-02_15-04-05"))
-	backupFilePath := fmt.Sprintf("%s/%s", s.cfg.Storage.BackupDir, backupFile)
-
-	// Ensure backup directory exists
-	if err := os.MkdirAll(s.cfg.Storage.BackupDir, os.ModePerm); err != nil {
-		s.logger.Error(traceID, "Failed to create backup directory", nil,
-			log.Error(err),
-			log.String("directory", s.cfg.Storage.BackupDir),
-		)
-		return "", time.Time{}, fmt.Errorf("unable to create backup directory: %w", err)
-	}
-
-	// Create pg_dump command
-	cmd := exec.CommandContext(ctx,
-		"pg_dump",
-		"-h", s.cfg.Database.Host,
-		"-p", s.cfg.Database.Port,
-		"-U", s.cfg.Database.User,
-		"-d", s.cfg.Database.Database,
-		"-F", "t",
-		"-f", backupFilePath,
-	)
-	cmd.Env = append(os.Environ(), fmt.Sprintf("PGPASSWORD=%s", s.cfg.Database.Password))
-
-	// Execute the dump
-	if err := cmd.Run(); err != nil {
-		s.logger.Error(traceID, "Failed to create database dump", nil,
-			log.Error(err),
-			log.String("file", backupFilePath),
-		)
-		return "", time.Time{}, fmt.Errorf("unable to backup database: %w", err)
-	}
-
-	s.logger.Info(traceID, "Database backup created", nil,
-		log.String("path", backupFilePath),
-	)
-
-	return backupFilePath, backupTime, nil
 }
 
 // uploadBackup uploads the backup file to storage
@@ -153,9 +116,9 @@ func (s *Service) uploadBackup(ctx context.Context, traceID, backupFilePath stri
 		return fmt.Errorf("unable to get file info: %w", err)
 	}
 
-	// Upload to storage
+	// Upload to storage - use FolderID for Google Drive, or as prefix for S3
 	uploadOpts := storage.UploadOptions{
-		FolderID: s.cfg.GoogleDrive.FolderID,
+		FolderID: s.cfg.GOOGLE_DRIVE_FOLDER_ID,
 	}
 
 	if err := s.storage.Upload(ctx, file, fileInfo.Name(), uploadOpts); err != nil {
@@ -173,7 +136,7 @@ func (s *Service) uploadBackup(ctx context.Context, traceID, backupFilePath stri
 func (s *Service) recordBackup(ctx context.Context, traceID, backupFile string, backupTime time.Time) error {
 	// Extract just the filename from the path
 	filename := backupFile
-	if idx := len(s.cfg.Storage.BackupDir) + 1; idx < len(backupFile) {
+	if idx := len(s.cfg.BACKUP_DIR) + 1; idx < len(backupFile) {
 		filename = backupFile[idx:]
 	}
 
@@ -196,9 +159,9 @@ func (s *Service) recordBackup(ctx context.Context, traceID, backupFile string, 
 	return nil
 }
 
-// deleteLocalBackup removes the local backup file
+// deleteLocalBackup removes the local backup file using the provider's Cleanup
 func (s *Service) deleteLocalBackup(traceID, backupFilePath string) error {
-	if err := os.Remove(backupFilePath); err != nil {
+	if err := s.provider.Cleanup(backupFilePath); err != nil {
 		s.logger.Error(traceID, "Failed to delete local backup file", nil,
 			log.Error(err),
 			log.String("path", backupFilePath),

@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/glennprays/dbeasebackup/config"
 	"github.com/glennprays/log"
 	"github.com/robfig/cron/v3"
 )
@@ -32,29 +33,31 @@ type Scheduler interface {
 // CronScheduler implements the Scheduler interface using robfig/cron
 type CronScheduler struct {
 	cron    *cron.Cron
+	cfg     *config.Config
 	logger  *log.Logger
 	running bool
 }
 
 // NewCronScheduler creates a new cron scheduler
-func NewCronScheduler(timezone string, logger *log.Logger) (*CronScheduler, error) {
+func NewCronScheduler(cfg *config.Config, logger *log.Logger) (*CronScheduler, error) {
 	traceID := "scheduler-init"
 
-	loc, err := time.LoadLocation(timezone)
+	loc, err := time.LoadLocation(cfg.SCHEDULER_TIMEZONE)
 	if err != nil {
 		logger.Error(traceID, "Failed to load timezone", nil,
 			log.Error(err),
-			log.String("timezone", timezone),
+			log.String("timezone", cfg.SCHEDULER_TIMEZONE),
 		)
-		return nil, fmt.Errorf("invalid timezone %s: %w", timezone, err)
+		return nil, fmt.Errorf("invalid timezone %s: %w", cfg.SCHEDULER_TIMEZONE, err)
 	}
 
 	logger.Info(traceID, "Scheduler initialized", nil,
-		log.String("timezone", timezone),
+		log.String("timezone", cfg.SCHEDULER_TIMEZONE),
 	)
 
 	return &CronScheduler{
 		cron:   cron.New(cron.WithLocation(loc)),
+		cfg:    cfg,
 		logger: logger,
 	}, nil
 }

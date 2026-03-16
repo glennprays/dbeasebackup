@@ -46,11 +46,11 @@ type Config struct {
 	GOOGLE_DRIVE_KEY_FILE  string `mapstructure:"GOOGLE_DRIVE_KEY_FILE" default:"service-account-key.json"`
 
 	// S3 Storage
-	S3_BUCKET          string `mapstructure:"S3_BUCKET" default:""`
-	S3_REGION          string `mapstructure:"S3_REGION" default:"us-east-1"`
-	S3_ACCESS_KEY_ID   string `mapstructure:"S3_ACCESS_KEY_ID" default:""`
+	S3_BUCKET            string `mapstructure:"S3_BUCKET" default:""`
+	S3_REGION            string `mapstructure:"S3_REGION" default:"us-east-1"`
+	S3_ACCESS_KEY_ID     string `mapstructure:"S3_ACCESS_KEY_ID" default:""`
 	S3_SECRET_ACCESS_KEY string `mapstructure:"S3_SECRET_ACCESS_KEY" default:""`
-	S3_ENDPOINT        string `mapstructure:"S3_ENDPOINT" default:""`
+	S3_ENDPOINT          string `mapstructure:"S3_ENDPOINT" default:""`
 }
 
 // Environment represents the application environment

@@ -57,6 +57,14 @@ func (p *PostgresProvider) Dump(ctx context.Context, backupDir string) (string, 
 		log.String("timeout", p.timeout.String()),
 	)
 
+	// Clean up stale connections that may block new backup operations
+	if err := p.cleanupStaleConnections(ctx, traceID); err != nil {
+		p.logger.Warn(traceID, "Failed to cleanup stale connections (non-fatal)", nil,
+			log.Error(err),
+			log.String("component", "postgres-provider"),
+		)
+	}
+
 	// Create context with timeout
 	ctx, cancel := context.WithTimeout(ctx, p.timeout)
 	defer cancel()
@@ -75,9 +83,8 @@ func (p *PostgresProvider) Dump(ctx context.Context, backupDir string) (string, 
 		return "", fmt.Errorf("unable to create backup directory: %w", err)
 	}
 
-	// Create pg_dump command
-	cmd := exec.CommandContext(ctx,
-		"pg_dump",
+	// Use exec.Command instead of exec.CommandContext to avoid hanging issues with pg_dump
+	cmd := exec.Command("pg_dump",
 		"-h", p.cfg.Host,
 		"-p", p.cfg.Port,
 		"-U", p.cfg.User,
@@ -91,17 +98,26 @@ func (p *PostgresProvider) Dump(ctx context.Context, backupDir string) (string, 
 	var stderr bytes.Buffer
 	cmd.Stderr = &stderr
 
-	// Execute the dump
-	if err := cmd.Run(); err != nil {
-		// Check for timeout first
-		if ctx.Err() == context.DeadlineExceeded {
-			p.logger.Error(traceID, "Database dump timed out", nil,
-				log.String("timeout", p.timeout.String()),
-				log.String("component", "postgres-provider"),
-			)
-			return "", fmt.Errorf("database dump timed out after %s", p.timeout)
-		}
+	p.logger.Debug(traceID, "Executing pg_dump command", nil,
+		log.String("component", "postgres-provider"),
+		log.String("command", cmd.String()),
+	)
 
+	// Execute the dump
+	err := cmd.Run()
+
+	// Check for context cancellation
+	select {
+	case <-ctx.Done():
+		p.logger.Error(traceID, "Backup context cancelled", nil,
+			log.String("component", "postgres-provider"),
+			log.String("ctx_error", ctx.Err().Error()),
+		)
+		return "", fmt.Errorf("backup cancelled: %w", ctx.Err())
+	default:
+	}
+
+	if err != nil {
 		pgDumpError := strings.TrimSpace(stderr.String())
 		if pgDumpError == "" {
 			pgDumpError = "(no stderr output)"
@@ -159,5 +175,36 @@ func (p *PostgresProvider) ValidateDependencies() error {
 	if err != nil {
 		return fmt.Errorf("pg_dump not found in PATH: please install PostgreSQL client tools (postgresql-client on Debian/Ubuntu, postgresql on macOS)")
 	}
+	return nil
+}
+
+// cleanupStaleConnections terminates idle database connections from previous pg_dump operations
+func (p *PostgresProvider) cleanupStaleConnections(ctx context.Context, traceID string) error {
+	p.logger.Debug(traceID, "Cleaning up stale database connections", nil,
+		log.String("component", "postgres-provider"),
+		log.String("database", p.cfg.Database),
+	)
+
+	cmd := exec.CommandContext(ctx, "psql",
+		"-h", p.cfg.Host,
+		"-p", p.cfg.Port,
+		"-U", p.cfg.User,
+		"-d", p.cfg.Database,
+		"-c", "SELECT pg_terminate_backend(pid) FROM pg_stat_activity WHERE datname = current_database() AND state = 'idle' AND pid != pg_backend_pid();",
+	)
+	cmd.Env = append(os.Environ(), fmt.Sprintf("PGPASSWORD=%s", p.cfg.Password))
+
+	var stdout, stderr bytes.Buffer
+	cmd.Stdout = &stdout
+	cmd.Stderr = &stderr
+
+	if err := cmd.Run(); err != nil {
+		return fmt.Errorf("failed to cleanup stale connections: %w (stderr: %s)", err, stderr.String())
+	}
+
+	p.logger.Debug(traceID, "Stale connection cleanup completed", nil,
+		log.String("component", "postgres-provider"),
+	)
+
 	return nil
 }

@@ -10,6 +10,7 @@ PLAN.md
 *.dll
 *.so
 *.dylib
+dbeasebackup
 
 # Test binary, built with `go test -c`
 *.test

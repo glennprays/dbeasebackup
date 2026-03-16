@@ -6,11 +6,13 @@ import (
 	"fmt"
 	"io"
 	"path/filepath"
+	"time"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/config"
 	"github.com/aws/aws-sdk-go-v2/credentials"
 	"github.com/aws/aws-sdk-go-v2/service/s3"
+	"github.com/glennprays/dbeasebackup/pkg/traceid"
 	"github.com/glennprays/log"
 )
 
@@ -84,12 +86,22 @@ func NewS3Storage(ctx context.Context, cfg S3Config, logger *log.Logger) (*S3Sto
 
 // Upload uploads a file to S3
 func (s *S3Storage) Upload(ctx context.Context, file io.Reader, filename string, opts UploadOptions) error {
-	traceID := "s3-upload"
+	traceID := traceid.FromContext(ctx)
+	startTime := time.Now()
+
+	s.logger.Info(traceID, "Starting S3 upload", nil,
+		log.String("filename", filename),
+		log.String("bucket", s.bucket),
+		log.String("component", "s3-storage"),
+	)
 
 	// Read the file content to determine size and for retry capability
 	content, err := io.ReadAll(file)
 	if err != nil {
-		s.logger.Error(traceID, "Failed to read file content", nil, log.Error(err))
+		s.logger.Error(traceID, "Failed to read file content", nil,
+			log.Error(err),
+			log.String("component", "s3-storage"),
+		)
 		return fmt.Errorf("unable to read file: %w", err)
 	}
 
@@ -117,13 +129,16 @@ func (s *S3Storage) Upload(ctx context.Context, file io.Reader, filename string,
 		s.logger.Error(traceID, "Failed to upload file to S3", nil,
 			log.Error(err),
 			log.String("key", key),
+			log.String("component", "s3-storage"),
 		)
 		return fmt.Errorf("unable to upload file to S3: %w", err)
 	}
 
-	s.logger.Info(traceID, "File uploaded to S3", nil,
+	s.logger.Info(traceID, "S3 upload completed", nil,
 		log.String("key", key),
 		log.Int("size", len(content)),
+		log.String("component", "s3-storage"),
+		log.String("duration", time.Since(startTime).String()),
 	)
 
 	return nil
@@ -131,7 +146,14 @@ func (s *S3Storage) Upload(ctx context.Context, file io.Reader, filename string,
 
 // Download downloads a file from S3
 func (s *S3Storage) Download(ctx context.Context, filename string) (io.ReadCloser, error) {
-	traceID := "s3-download"
+	traceID := traceid.FromContext(ctx)
+	startTime := time.Now()
+
+	s.logger.Info(traceID, "Starting S3 download", nil,
+		log.String("key", filename),
+		log.String("bucket", s.bucket),
+		log.String("component", "s3-storage"),
+	)
 
 	output, err := s.client.GetObject(ctx, &s3.GetObjectInput{
 		Bucket: aws.String(s.bucket),
@@ -141,12 +163,15 @@ func (s *S3Storage) Download(ctx context.Context, filename string) (io.ReadClose
 		s.logger.Error(traceID, "Failed to download file from S3", nil,
 			log.Error(err),
 			log.String("key", filename),
+			log.String("component", "s3-storage"),
 		)
 		return nil, fmt.Errorf("unable to download file from S3: %w", err)
 	}
 
-	s.logger.Info(traceID, "File downloaded from S3", nil,
+	s.logger.Info(traceID, "S3 download completed", nil,
 		log.String("key", filename),
+		log.String("component", "s3-storage"),
+		log.String("duration", time.Since(startTime).String()),
 	)
 
 	return output.Body, nil
@@ -154,7 +179,14 @@ func (s *S3Storage) Download(ctx context.Context, filename string) (io.ReadClose
 
 // Delete deletes a file from S3
 func (s *S3Storage) Delete(ctx context.Context, filename string) error {
-	traceID := "s3-delete"
+	traceID := traceid.FromContext(ctx)
+	startTime := time.Now()
+
+	s.logger.Info(traceID, "Starting S3 delete", nil,
+		log.String("key", filename),
+		log.String("bucket", s.bucket),
+		log.String("component", "s3-storage"),
+	)
 
 	_, err := s.client.DeleteObject(ctx, &s3.DeleteObjectInput{
 		Bucket: aws.String(s.bucket),
@@ -164,12 +196,15 @@ func (s *S3Storage) Delete(ctx context.Context, filename string) error {
 		s.logger.Error(traceID, "Failed to delete file from S3", nil,
 			log.Error(err),
 			log.String("key", filename),
+			log.String("component", "s3-storage"),
 		)
 		return fmt.Errorf("unable to delete file from S3: %w", err)
 	}
 
-	s.logger.Info(traceID, "File deleted from S3", nil,
+	s.logger.Info(traceID, "S3 delete completed", nil,
 		log.String("key", filename),
+		log.String("component", "s3-storage"),
+		log.String("duration", time.Since(startTime).String()),
 	)
 
 	return nil
@@ -177,7 +212,13 @@ func (s *S3Storage) Delete(ctx context.Context, filename string) error {
 
 // List lists files in S3
 func (s *S3Storage) List(ctx context.Context, opts ListOptions) ([]FileInfo, error) {
-	traceID := "s3-list"
+	traceID := traceid.FromContext(ctx)
+	startTime := time.Now()
+
+	s.logger.Info(traceID, "Starting S3 list", nil,
+		log.String("bucket", s.bucket),
+		log.String("component", "s3-storage"),
+	)
 
 	var files []FileInfo
 
@@ -207,7 +248,10 @@ func (s *S3Storage) List(ctx context.Context, opts ListOptions) ([]FileInfo, err
 
 		page, err := paginator.NextPage(ctx)
 		if err != nil {
-			s.logger.Error(traceID, "Failed to list files from S3", nil, log.Error(err))
+			s.logger.Error(traceID, "Failed to list files from S3", nil,
+				log.Error(err),
+				log.String("component", "s3-storage"),
+			)
 			return nil, fmt.Errorf("unable to list files from S3: %w", err)
 		}
 
@@ -227,8 +271,10 @@ func (s *S3Storage) List(ctx context.Context, opts ListOptions) ([]FileInfo, err
 		}
 	}
 
-	s.logger.Info(traceID, "Files listed from S3", nil,
+	s.logger.Info(traceID, "S3 list completed", nil,
 		log.Int("count", len(files)),
+		log.String("component", "s3-storage"),
+		log.String("duration", time.Since(startTime).String()),
 	)
 
 	return files, nil
@@ -236,13 +282,16 @@ func (s *S3Storage) List(ctx context.Context, opts ListOptions) ([]FileInfo, err
 
 // Health checks if the S3 storage service is healthy
 func (s *S3Storage) Health(ctx context.Context) error {
-	traceID := "s3-health"
+	traceID := traceid.FromContext(ctx)
 
 	_, err := s.client.HeadBucket(ctx, &s3.HeadBucketInput{
 		Bucket: aws.String(s.bucket),
 	})
 	if err != nil {
-		s.logger.Error(traceID, "S3 health check failed", nil, log.Error(err))
+		s.logger.Error(traceID, "S3 health check failed", nil,
+			log.Error(err),
+			log.String("component", "s3-storage"),
+		)
 		return fmt.Errorf("S3 health check failed: %w", err)
 	}
 

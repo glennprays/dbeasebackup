@@ -11,7 +11,7 @@ type Provider interface {
 	Dump(ctx context.Context, backupDir string) (filePath string, err error)
 
 	// Cleanup removes temporary files after backup
-	Cleanup(filePath string) error
+	Cleanup(ctx context.Context, filePath string) error
 
 	// ValidateDependencies checks if required external tools are available
 	ValidateDependencies() error

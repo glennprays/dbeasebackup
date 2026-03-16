@@ -6,7 +6,9 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+	"time"
 
+	"github.com/glennprays/dbeasebackup/pkg/traceid"
 	"github.com/glennprays/log"
 )
 
@@ -18,7 +20,7 @@ func TestPostgresProvider_Name(t *testing.T) {
 		Output:  log.OutputStdout,
 	})
 
-	provider := NewPostgresProvider(PostgresConfig{}, logger)
+	provider := NewPostgresProvider(PostgresConfig{}, logger, 30*time.Minute)
 	if got := provider.Name(); got != "postgres-backup" {
 		t.Errorf("Name() = %v, want %v", got, "postgres-backup")
 	}
@@ -32,7 +34,7 @@ func TestPostgresProvider_Cleanup_Success(t *testing.T) {
 		Output:  log.OutputStdout,
 	})
 
-	provider := NewPostgresProvider(PostgresConfig{}, logger)
+	provider := NewPostgresProvider(PostgresConfig{}, logger, 30*time.Minute)
 
 	// Create a temp file to cleanup
 	tempDir := t.TempDir()
@@ -47,7 +49,7 @@ func TestPostgresProvider_Cleanup_Success(t *testing.T) {
 	}
 
 	// Cleanup the file
-	err := provider.Cleanup(tempFile)
+	err := provider.Cleanup(traceid.NewContext(context.Background(), "test-trace-id"), tempFile)
 	if err != nil {
 		t.Errorf("Cleanup() unexpected error = %v", err)
 	}
@@ -66,10 +68,10 @@ func TestPostgresProvider_Cleanup_FileNotExist(t *testing.T) {
 		Output:  log.OutputStdout,
 	})
 
-	provider := NewPostgresProvider(PostgresConfig{}, logger)
+	provider := NewPostgresProvider(PostgresConfig{}, logger, 30*time.Minute)
 
 	// Try to cleanup a non-existent file
-	err := provider.Cleanup("/non/existent/file.tar")
+	err := provider.Cleanup(traceid.NewContext(context.Background(), "test-trace-id"), "/non/existent/file.tar")
 	if err == nil {
 		t.Error("Cleanup() expected error for non-existent file")
 	}
@@ -83,10 +85,10 @@ func TestPostgresProvider_Cleanup_InvalidPath(t *testing.T) {
 		Output:  log.OutputStdout,
 	})
 
-	provider := NewPostgresProvider(PostgresConfig{}, logger)
+	provider := NewPostgresProvider(PostgresConfig{}, logger, 30*time.Minute)
 
 	// Try to cleanup an invalid path
-	err := provider.Cleanup("")
+	err := provider.Cleanup(traceid.NewContext(context.Background(), "test-trace-id"), "")
 	if err == nil {
 		t.Error("Cleanup() expected error for empty path")
 	}
@@ -108,7 +110,7 @@ func TestPostgresProvider_NewPostgresProvider(t *testing.T) {
 		Database: "testdb",
 	}
 
-	provider := NewPostgresProvider(cfg, logger)
+	provider := NewPostgresProvider(cfg, logger, 30*time.Minute)
 
 	if provider == nil {
 		t.Fatal("NewPostgresProvider() returned nil")
@@ -128,6 +130,24 @@ func TestPostgresProvider_NewPostgresProvider(t *testing.T) {
 	}
 	if provider.cfg.Database != "testdb" {
 		t.Errorf("Expected database testdb, got %s", provider.cfg.Database)
+	}
+	if provider.timeout != 30*time.Minute {
+		t.Errorf("Expected timeout 30m, got %s", provider.timeout)
+	}
+}
+
+func TestPostgresProvider_NewPostgresProvider_DefaultTimeout(t *testing.T) {
+	logger, _ := log.New(log.Config{
+		Service: "test",
+		Env:     "development",
+		Level:   log.ErrorLevel,
+		Output:  log.OutputStdout,
+	})
+
+	// Test with zero timeout - should use default
+	provider := NewPostgresProvider(PostgresConfig{}, logger, 0)
+	if provider.timeout != 30*time.Minute {
+		t.Errorf("Expected default timeout 30m, got %s", provider.timeout)
 	}
 }
 
@@ -151,11 +171,11 @@ func TestPostgresProvider_Dump_InvalidDirectory(t *testing.T) {
 		User:     "testuser",
 		Password: "testpass",
 		Database: "testdb",
-	}, logger)
+	}, logger, 30*time.Minute)
 
 	// Try to create a backup in a path that would require root permissions
 	// This tests the directory creation error path
-	ctx := context.Background()
+	ctx := traceid.NewContext(context.Background(), "test-trace-id")
 
 	// Use an invalid path that will fail on MkdirAll
 	_, err = provider.Dump(ctx, "/nonexistent/root/backup")
@@ -183,10 +203,10 @@ func TestPostgresProvider_Dump_ContextCancellation(t *testing.T) {
 		User:     "testuser",
 		Password: "testpass",
 		Database: "testdb",
-	}, logger)
+	}, logger, 30*time.Minute)
 
 	// Create a cancelled context
-	ctx, cancel := context.WithCancel(context.Background())
+	ctx, cancel := context.WithCancel(traceid.NewContext(context.Background(), "test-trace-id"))
 	cancel()
 
 	tempDir := t.TempDir()
@@ -208,9 +228,9 @@ func TestPostgresProvider_Cleanup_ErrorWrapping(t *testing.T) {
 		Output:  log.OutputStdout,
 	})
 
-	provider := NewPostgresProvider(PostgresConfig{}, logger)
+	provider := NewPostgresProvider(PostgresConfig{}, logger, 30*time.Minute)
 
-	err := provider.Cleanup("/nonexistent/path/file.tar")
+	err := provider.Cleanup(traceid.NewContext(context.Background(), "test-trace-id"), "/nonexistent/path/file.tar")
 	if err == nil {
 		t.Fatal("Cleanup() expected error for non-existent file")
 	}
@@ -240,13 +260,13 @@ func TestPostgresProvider_Dump_CreatesDirectory(t *testing.T) {
 		User:     "testuser",
 		Password: "testpass",
 		Database: "testdb",
-	}, logger)
+	}, logger, 30*time.Minute)
 
 	// Create a temp directory and a subdirectory path that doesn't exist
 	tempDir := t.TempDir()
 	backupDir := filepath.Join(tempDir, "backups", "postgres")
 
-	ctx := context.Background()
+	ctx := traceid.NewContext(context.Background(), "test-trace-id")
 	_, err := provider.Dump(ctx, backupDir)
 
 	// Check if the directory was created (even if pg_dump fails)

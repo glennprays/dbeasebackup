@@ -12,6 +12,7 @@ import (
 	"github.com/glennprays/dbeasebackup/config"
 	"github.com/glennprays/dbeasebackup/pkg/storage"
 	"github.com/glennprays/dbeasebackup/pkg/testutils"
+	"github.com/glennprays/dbeasebackup/pkg/traceid"
 	"github.com/glennprays/log"
 )
 
@@ -27,6 +28,10 @@ func createTestLogger(t *testing.T) *log.Logger {
 		t.Fatalf("Failed to create logger: %v", err)
 	}
 	return logger
+}
+
+func createTestContext() context.Context {
+	return traceid.NewContext(context.Background(), "test-trace-id")
 }
 
 func createTempBackupFile(t *testing.T, backupDir string) string {
@@ -131,7 +136,7 @@ func TestService_Backup_Success(t *testing.T) {
 		DumpFunc: func(ctx context.Context, dir string) (string, error) {
 			return backupFile, nil
 		},
-		CleanupFunc: func(filePath string) error {
+		CleanupFunc: func(ctx context.Context, filePath string) error {
 			return os.Remove(filePath)
 		},
 	}
@@ -143,7 +148,7 @@ func TestService_Backup_Success(t *testing.T) {
 	if err != nil {
 		t.Fatalf("NewService() error = %v", err)
 	}
-	err = service.Backup(context.Background())
+	err = service.Backup(createTestContext())
 	if err != nil {
 		t.Errorf("Backup() unexpected error = %v", err)
 	}
@@ -173,7 +178,7 @@ func TestService_Backup_DumpError(t *testing.T) {
 	if err != nil {
 		t.Fatalf("NewService() error = %v", err)
 	}
-	err = service.Backup(context.Background())
+	err = service.Backup(createTestContext())
 	if err == nil {
 		t.Error("Backup() expected error when dump fails")
 	}
@@ -228,7 +233,7 @@ func TestService_Backup_UploadError(t *testing.T) {
 		DumpFunc: func(ctx context.Context, dir string) (string, error) {
 			return backupFile, nil
 		},
-		CleanupFunc: func(filePath string) error {
+		CleanupFunc: func(ctx context.Context, filePath string) error {
 			return nil
 		},
 	}
@@ -240,7 +245,7 @@ func TestService_Backup_UploadError(t *testing.T) {
 	if err != nil {
 		t.Fatalf("NewService() error = %v", err)
 	}
-	err = service.Backup(context.Background())
+	err = service.Backup(createTestContext())
 	if err == nil {
 		t.Error("Backup() expected error when upload fails")
 	}
@@ -265,7 +270,7 @@ func TestService_Backup_CleanupError(t *testing.T) {
 		DumpFunc: func(ctx context.Context, dir string) (string, error) {
 			return backupFile, nil
 		},
-		CleanupFunc: func(filePath string) error {
+		CleanupFunc: func(ctx context.Context, filePath string) error {
 			return errors.New("cleanup failed")
 		},
 	}
@@ -277,7 +282,7 @@ func TestService_Backup_CleanupError(t *testing.T) {
 	if err != nil {
 		t.Fatalf("NewService() error = %v", err)
 	}
-	err = service.Backup(context.Background())
+	err = service.Backup(createTestContext())
 	if err == nil {
 		t.Error("Backup() expected error when cleanup fails")
 	}
@@ -307,7 +312,7 @@ func TestService_Health_Success(t *testing.T) {
 	if err != nil {
 		t.Fatalf("NewService() error = %v", err)
 	}
-	err = service.Health(context.Background())
+	err = service.Health(createTestContext())
 	if err != nil {
 		t.Errorf("Health() unexpected error = %v", err)
 	}
@@ -337,7 +342,7 @@ func TestService_Health_DatabaseError(t *testing.T) {
 	if err != nil {
 		t.Fatalf("NewService() error = %v", err)
 	}
-	err = service.Health(context.Background())
+	err = service.Health(createTestContext())
 	if err == nil {
 		t.Error("Health() expected error when database ping fails")
 	}
@@ -367,7 +372,7 @@ func TestService_Health_StorageError(t *testing.T) {
 	if err != nil {
 		t.Fatalf("NewService() error = %v", err)
 	}
-	err = service.Health(context.Background())
+	err = service.Health(createTestContext())
 	if err == nil {
 		t.Error("Health() expected error when storage health check fails")
 	}
@@ -452,7 +457,7 @@ func TestService_Execute(t *testing.T) {
 		DumpFunc: func(ctx context.Context, dir string) (string, error) {
 			return backupFile, nil
 		},
-		CleanupFunc: func(filePath string) error {
+		CleanupFunc: func(ctx context.Context, filePath string) error {
 			return os.Remove(filePath)
 		},
 	}
@@ -465,7 +470,7 @@ func TestService_Execute(t *testing.T) {
 		t.Fatalf("NewService() error = %v", err)
 	}
 	// Execute is the same as Backup
-	err = service.Execute(context.Background())
+	err = service.Execute(createTestContext())
 	if err != nil {
 		t.Errorf("Execute() unexpected error = %v", err)
 	}
@@ -554,7 +559,7 @@ func TestService_Backup_OpenFileError(t *testing.T) {
 	if err != nil {
 		t.Fatalf("NewService() error = %v", err)
 	}
-	err = service.Backup(context.Background())
+	err = service.Backup(createTestContext())
 	if err == nil {
 		t.Error("Backup() expected error when file cannot be opened")
 	}
@@ -589,7 +594,7 @@ func TestService_Backup_RecordThenUploadOrder(t *testing.T) {
 			callOrder = append(callOrder, "dump")
 			return backupFile, nil
 		},
-		CleanupFunc: func(filePath string) error {
+		CleanupFunc: func(ctx context.Context, filePath string) error {
 			callOrder = append(callOrder, "cleanup")
 			return os.Remove(filePath)
 		},
@@ -606,7 +611,7 @@ func TestService_Backup_RecordThenUploadOrder(t *testing.T) {
 	// Start tracking calls after service initialization
 	backupStarted = true
 
-	err = service.Backup(context.Background())
+	err = service.Backup(createTestContext())
 	if err != nil {
 		t.Errorf("Backup() unexpected error = %v", err)
 	}

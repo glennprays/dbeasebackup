@@ -49,6 +49,24 @@ func main() {
 
 	logger.Info(traceID, "Database connected", nil)
 
+	// Validate database connection
+	if err := db.Ping(context.Background()); err != nil {
+		logger.Error(traceID, "Database connection validation failed", nil,
+			log.Error(err),
+			log.String("host", cfg.PG_HOST),
+			log.String("port", cfg.PG_PORT),
+			log.String("database", cfg.PG_DATABASE),
+			log.String("user", cfg.PG_USER),
+		)
+		os.Exit(1)
+	}
+
+	logger.Info(traceID, "Database connection validated", nil,
+		log.String("host", cfg.PG_HOST),
+		log.String("port", cfg.PG_PORT),
+		log.String("database", cfg.PG_DATABASE),
+	)
+
 	// Initialize backup provider
 	backupProvider, err := initializeBackupProvider(cfg, logger)
 	if err != nil {
@@ -130,7 +148,7 @@ func initializeBackupProvider(cfg *config.Config, logger *log.Logger) (backuppro
 			Password: cfg.PG_PASSWORD,
 			Database: cfg.PG_DATABASE,
 		}
-		return backupprovider.NewPostgresProvider(pgConfig, logger), nil
+		return backupprovider.NewPostgresProvider(pgConfig, logger, cfg.GetBackupTimeout()), nil
 	default:
 		return nil, fmt.Errorf("unsupported backup provider: %s", cfg.BACKUP_PROVIDER)
 	}

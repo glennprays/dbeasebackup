@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/glennprays/dbeasebackup/config"
+	"github.com/glennprays/dbeasebackup/pkg/traceid"
 	"github.com/glennprays/log"
 	"github.com/robfig/cron/v3"
 )
@@ -67,23 +68,32 @@ func (s *CronScheduler) AddJob(cronExpr string, job Job) error {
 	traceID := "scheduler-add-job"
 
 	entryID, err := s.cron.AddFunc(cronExpr, func() {
-		jobTraceID := fmt.Sprintf("job-%s-%d", job.Name(), time.Now().Unix())
+		// Generate trace_id ONCE at job start
+		jobTraceID := traceid.Generate()
+		startTime := time.Now()
+
+		// Create context with trace_id
+		ctx := traceid.NewContext(context.Background(), jobTraceID)
 
 		s.logger.Info(jobTraceID, "Starting scheduled job", nil,
 			log.String("job", job.Name()),
+			log.String("component", "scheduler"),
 		)
 
-		ctx := context.Background()
 		if err := job.Execute(ctx); err != nil {
 			s.logger.Error(jobTraceID, "Job execution failed", nil,
 				log.Error(err),
 				log.String("job", job.Name()),
+				log.String("component", "scheduler"),
+				log.String("duration", time.Since(startTime).String()),
 			)
 			return
 		}
 
 		s.logger.Info(jobTraceID, "Job completed successfully", nil,
 			log.String("job", job.Name()),
+			log.String("component", "scheduler"),
+			log.String("duration", time.Since(startTime).String()),
 		)
 	})
 

@@ -6,6 +6,7 @@ import (
 	"os"
 	"reflect"
 	"strings"
+	"time"
 
 	"github.com/creasty/defaults"
 	"github.com/joho/godotenv"
@@ -31,7 +32,8 @@ type Config struct {
 	PG_DATABASE string `mapstructure:"PG_DATABASE" default:""`
 
 	// Storage
-	BACKUP_DIR string `mapstructure:"BACKUP_DIR" default:"backups/postgres"`
+	BACKUP_DIR     string `mapstructure:"BACKUP_DIR" default:"backups/postgres"`
+	BACKUP_TIMEOUT string `mapstructure:"BACKUP_TIMEOUT" default:"30m"`
 
 	// Scheduler
 	CRON_SCHEDULE      string `mapstructure:"CRON_SCHEDULE" default:""`
@@ -198,4 +200,13 @@ func (c *Config) IsProduction() bool {
 // IsDevelopment returns true if running in development mode
 func (c *Config) IsDevelopment() bool {
 	return !c.IsProduction()
+}
+
+// GetBackupTimeout parses the BACKUP_TIMEOUT string into a time.Duration
+func (c *Config) GetBackupTimeout() time.Duration {
+	d, err := time.ParseDuration(c.BACKUP_TIMEOUT)
+	if err != nil {
+		return 30 * time.Minute // fallback to default
+	}
+	return d
 }

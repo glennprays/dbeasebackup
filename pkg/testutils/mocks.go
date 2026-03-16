@@ -116,7 +116,7 @@ func (m *MockStorage) Health(ctx context.Context) error {
 type MockProvider struct {
 	NameFunc                 func() string
 	DumpFunc                 func(ctx context.Context, backupDir string) (string, error)
-	CleanupFunc              func(filePath string) error
+	CleanupFunc              func(ctx context.Context, filePath string) error
 	ValidateDependenciesFunc func() error
 }
 
@@ -134,9 +134,9 @@ func (m *MockProvider) Dump(ctx context.Context, backupDir string) (string, erro
 	return "", nil
 }
 
-func (m *MockProvider) Cleanup(filePath string) error {
+func (m *MockProvider) Cleanup(ctx context.Context, filePath string) error {
 	if m.CleanupFunc != nil {
-		return m.CleanupFunc(filePath)
+		return m.CleanupFunc(ctx, filePath)
 	}
 	return nil
 }

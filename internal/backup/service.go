@@ -12,6 +12,7 @@ import (
 	backupprovider "github.com/glennprays/dbeasebackup/pkg/backup"
 	"github.com/glennprays/dbeasebackup/pkg/database"
 	"github.com/glennprays/dbeasebackup/pkg/storage"
+	"github.com/glennprays/dbeasebackup/pkg/traceid"
 	"github.com/glennprays/log"
 )
 
@@ -60,9 +61,13 @@ func (s *Service) Execute(ctx context.Context) error {
 
 // Backup performs the complete backup workflow
 func (s *Service) Backup(ctx context.Context) error {
-	traceID := fmt.Sprintf("backup-%d", time.Now().Unix())
+	traceID := traceid.FromContext(ctx)
+	startTime := time.Now()
 
-	s.logger.Info(traceID, "Starting backup", nil)
+	s.logger.Info(traceID, "Starting backup workflow", nil,
+		log.String("component", "backup-service"),
+		log.String("provider", s.provider.Name()),
+	)
 
 	// Create the backup dump using provider
 	backupFile, err := s.provider.Dump(ctx, s.cfg.BACKUP_DIR)
@@ -83,14 +88,17 @@ func (s *Service) Backup(ctx context.Context) error {
 	}
 
 	// Delete the local backup file
-	if err := s.deleteLocalBackup(traceID, backupFile); err != nil {
+	if err := s.deleteLocalBackup(ctx, traceID, backupFile); err != nil {
 		return err
 	}
 
 	// Run garbage collection
 	s.runGC(traceID)
 
-	s.logger.Info(traceID, "Backup completed successfully", nil)
+	s.logger.Info(traceID, "Backup workflow completed successfully", nil,
+		log.String("component", "backup-service"),
+		log.String("duration", time.Since(startTime).String()),
+	)
 	return nil
 }
 
@@ -101,6 +109,7 @@ func (s *Service) uploadBackup(ctx context.Context, traceID, backupFilePath stri
 		s.logger.Error(traceID, "Failed to open backup file for upload", nil,
 			log.Error(err),
 			log.String("path", backupFilePath),
+			log.String("component", "backup-service"),
 		)
 		return fmt.Errorf("unable to open backup file: %w", err)
 	}
@@ -112,6 +121,7 @@ func (s *Service) uploadBackup(ctx context.Context, traceID, backupFilePath stri
 		s.logger.Error(traceID, "Failed to get file info", nil,
 			log.Error(err),
 			log.String("path", backupFilePath),
+			log.String("component", "backup-service"),
 		)
 		return fmt.Errorf("unable to get file info: %w", err)
 	}
@@ -127,6 +137,7 @@ func (s *Service) uploadBackup(ctx context.Context, traceID, backupFilePath stri
 
 	s.logger.Info(traceID, "Backup uploaded to storage", nil,
 		log.String("filename", fileInfo.Name()),
+		log.String("component", "backup-service"),
 	)
 
 	return nil
@@ -148,29 +159,33 @@ func (s *Service) recordBackup(ctx context.Context, traceID, backupFile string, 
 		s.logger.Error(traceID, "Failed to record backup in database", nil,
 			log.Error(err),
 			log.String("file", filename),
+			log.String("component", "backup-service"),
 		)
 		return fmt.Errorf("unable to record backup: %w", err)
 	}
 
 	s.logger.Info(traceID, "Backup recorded in database", nil,
 		log.String("file", filename),
+		log.String("component", "backup-service"),
 	)
 
 	return nil
 }
 
 // deleteLocalBackup removes the local backup file using the provider's Cleanup
-func (s *Service) deleteLocalBackup(traceID, backupFilePath string) error {
-	if err := s.provider.Cleanup(backupFilePath); err != nil {
+func (s *Service) deleteLocalBackup(ctx context.Context, traceID, backupFilePath string) error {
+	if err := s.provider.Cleanup(ctx, backupFilePath); err != nil {
 		s.logger.Error(traceID, "Failed to delete local backup file", nil,
 			log.Error(err),
 			log.String("path", backupFilePath),
+			log.String("component", "backup-service"),
 		)
 		return fmt.Errorf("unable to delete backup file: %w", err)
 	}
 
 	s.logger.Info(traceID, "Local backup file deleted", nil,
 		log.String("path", backupFilePath),
+		log.String("component", "backup-service"),
 	)
 
 	return nil

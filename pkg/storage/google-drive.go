@@ -7,6 +7,7 @@ import (
 	"os"
 	"time"
 
+	"github.com/glennprays/dbeasebackup/pkg/traceid"
 	"github.com/glennprays/log"
 	"google.golang.org/api/drive/v3"
 	"google.golang.org/api/option"
@@ -56,7 +57,14 @@ func (g *GoogleDriveStorage) initService(ctx context.Context, keyPath string) er
 
 // Upload uploads a file to Google Drive
 func (g *GoogleDriveStorage) Upload(ctx context.Context, file io.Reader, filename string, opts UploadOptions) error {
-	traceID := "gdrive-upload"
+	traceID := traceid.FromContext(ctx)
+	startTime := time.Now()
+
+	g.logger.Info(traceID, "Starting Google Drive upload", nil,
+		log.String("filename", filename),
+		log.String("folderID", opts.FolderID),
+		log.String("component", "google-drive-storage"),
+	)
 
 	if g.service == nil {
 		return fmt.Errorf("Drive service not initialized")
@@ -75,13 +83,16 @@ func (g *GoogleDriveStorage) Upload(ctx context.Context, file io.Reader, filenam
 		g.logger.Error(traceID, "Failed to upload file to Google Drive", nil,
 			log.Error(err),
 			log.String("filename", filename),
+			log.String("component", "google-drive-storage"),
 		)
 		return fmt.Errorf("unable to upload file: %w", err)
 	}
 
-	g.logger.Info(traceID, "File uploaded to Google Drive", nil,
+	g.logger.Info(traceID, "Google Drive upload completed", nil,
 		log.String("filename", filename),
 		log.String("folderID", opts.FolderID),
+		log.String("component", "google-drive-storage"),
+		log.String("duration", time.Since(startTime).String()),
 	)
 
 	return nil
@@ -89,7 +100,13 @@ func (g *GoogleDriveStorage) Upload(ctx context.Context, file io.Reader, filenam
 
 // Download downloads a file from Google Drive
 func (g *GoogleDriveStorage) Download(ctx context.Context, filename string) (io.ReadCloser, error) {
-	traceID := "gdrive-download"
+	traceID := traceid.FromContext(ctx)
+	startTime := time.Now()
+
+	g.logger.Info(traceID, "Starting Google Drive download", nil,
+		log.String("filename", filename),
+		log.String("component", "google-drive-storage"),
+	)
 
 	if g.service == nil {
 		return nil, fmt.Errorf("Drive service not initialized")
@@ -102,6 +119,7 @@ func (g *GoogleDriveStorage) Download(ctx context.Context, filename string) (io.
 		g.logger.Error(traceID, "Failed to search for file", nil,
 			log.Error(err),
 			log.String("filename", filename),
+			log.String("component", "google-drive-storage"),
 		)
 		return nil, fmt.Errorf("unable to search for file: %w", err)
 	}
@@ -117,12 +135,15 @@ func (g *GoogleDriveStorage) Download(ctx context.Context, filename string) (io.
 			log.Error(err),
 			log.String("filename", filename),
 			log.String("fileID", fileID),
+			log.String("component", "google-drive-storage"),
 		)
 		return nil, fmt.Errorf("unable to download file: %w", err)
 	}
 
-	g.logger.Info(traceID, "File downloaded from Google Drive", nil,
+	g.logger.Info(traceID, "Google Drive download completed", nil,
 		log.String("filename", filename),
+		log.String("component", "google-drive-storage"),
+		log.String("duration", time.Since(startTime).String()),
 	)
 
 	return res.Body, nil
@@ -130,7 +151,13 @@ func (g *GoogleDriveStorage) Download(ctx context.Context, filename string) (io.
 
 // Delete deletes a file from Google Drive
 func (g *GoogleDriveStorage) Delete(ctx context.Context, filename string) error {
-	traceID := "gdrive-delete"
+	traceID := traceid.FromContext(ctx)
+	startTime := time.Now()
+
+	g.logger.Info(traceID, "Starting Google Drive delete", nil,
+		log.String("filename", filename),
+		log.String("component", "google-drive-storage"),
+	)
 
 	if g.service == nil {
 		return fmt.Errorf("Drive service not initialized")
@@ -143,6 +170,7 @@ func (g *GoogleDriveStorage) Delete(ctx context.Context, filename string) error 
 		g.logger.Error(traceID, "Failed to search for file to delete", nil,
 			log.Error(err),
 			log.String("filename", filename),
+			log.String("component", "google-drive-storage"),
 		)
 		return fmt.Errorf("unable to search for file: %w", err)
 	}
@@ -158,12 +186,15 @@ func (g *GoogleDriveStorage) Delete(ctx context.Context, filename string) error 
 			log.Error(err),
 			log.String("filename", filename),
 			log.String("fileID", fileID),
+			log.String("component", "google-drive-storage"),
 		)
 		return fmt.Errorf("unable to delete file: %w", err)
 	}
 
-	g.logger.Info(traceID, "File deleted from Google Drive", nil,
+	g.logger.Info(traceID, "Google Drive delete completed", nil,
 		log.String("filename", filename),
+		log.String("component", "google-drive-storage"),
+		log.String("duration", time.Since(startTime).String()),
 	)
 
 	return nil
@@ -171,7 +202,13 @@ func (g *GoogleDriveStorage) Delete(ctx context.Context, filename string) error 
 
 // List lists files in Google Drive
 func (g *GoogleDriveStorage) List(ctx context.Context, opts ListOptions) ([]FileInfo, error) {
-	traceID := "gdrive-list"
+	traceID := traceid.FromContext(ctx)
+	startTime := time.Now()
+
+	g.logger.Info(traceID, "Starting Google Drive list", nil,
+		log.String("folderID", opts.FolderID),
+		log.String("component", "google-drive-storage"),
+	)
 
 	if g.service == nil {
 		return nil, fmt.Errorf("Drive service not initialized")
@@ -195,6 +232,7 @@ func (g *GoogleDriveStorage) List(ctx context.Context, opts ListOptions) ([]File
 		g.logger.Error(traceID, "Failed to list files", nil,
 			log.Error(err),
 			log.String("folderID", opts.FolderID),
+			log.String("component", "google-drive-storage"),
 		)
 		return nil, fmt.Errorf("unable to list files: %w", err)
 	}
@@ -213,8 +251,10 @@ func (g *GoogleDriveStorage) List(ctx context.Context, opts ListOptions) ([]File
 		})
 	}
 
-	g.logger.Info(traceID, "Files listed from Google Drive", nil,
+	g.logger.Info(traceID, "Google Drive list completed", nil,
 		log.Int("count", len(fileInfos)),
+		log.String("component", "google-drive-storage"),
+		log.String("duration", time.Since(startTime).String()),
 	)
 
 	return fileInfos, nil

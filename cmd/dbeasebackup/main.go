@@ -170,6 +170,7 @@ func initializeStorage(ctx context.Context, cfg *config.Config, logger *log.Logg
 			AccessKeyID:     cfg.S3_ACCESS_KEY_ID,
 			SecretAccessKey: cfg.S3_SECRET_ACCESS_KEY,
 			Endpoint:        cfg.S3_ENDPOINT,
+			Prefix:          cfg.S3_PREFIX,
 		}
 		return storage.NewS3Storage(ctx, s3Config, logger)
 	default:

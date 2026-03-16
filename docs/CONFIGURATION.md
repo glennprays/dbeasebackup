@@ -42,6 +42,7 @@ This document provides comprehensive configuration details for DBEaseBackup.
 | `S3_ACCESS_KEY_ID` | string | - | Conditional* | AWS access key ID. Required when `STORAGE_TYPE=s3`. |
 | `S3_SECRET_ACCESS_KEY` | string | - | Conditional* | AWS secret access key. Required when `STORAGE_TYPE=s3`. |
 | `S3_ENDPOINT` | string | - | No | Custom S3 endpoint URL. Use for S3-compatible storage (MinIO, DigitalOcean Spaces, etc.). |
+| `S3_PREFIX` | string | - | No | Folder prefix for organizing backups within the bucket. Example: `backups/postgres`. |
 | **Logging Configuration** |
 | `LOG_LEVEL` | string | `info` | No | Log verbosity level. Values: `debug`, `info`, `warn`, `error`. |
 | `LOG_FORMAT` | string | `text` | No | Log output format. Values: `json`, `text`. Use `json` for production. |

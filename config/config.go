@@ -53,6 +53,7 @@ type Config struct {
 	S3_ACCESS_KEY_ID     string `mapstructure:"S3_ACCESS_KEY_ID" default:""`
 	S3_SECRET_ACCESS_KEY string `mapstructure:"S3_SECRET_ACCESS_KEY" default:""`
 	S3_ENDPOINT          string `mapstructure:"S3_ENDPOINT" default:""`
+	S3_PREFIX            string `mapstructure:"S3_PREFIX" default:""`
 }
 
 // Environment represents the application environment

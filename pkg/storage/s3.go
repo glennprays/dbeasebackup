@@ -20,6 +20,7 @@ import (
 type S3Storage struct {
 	client *s3.Client
 	bucket string
+	prefix string
 	logger *log.Logger
 }
 
@@ -30,6 +31,7 @@ type S3Config struct {
 	AccessKeyID     string
 	SecretAccessKey string
 	Endpoint        string // For S3-compatible services like MinIO
+	Prefix          string // Folder prefix for all uploads (e.g., "backups/postgres")
 }
 
 // NewS3Storage creates a new S3 storage provider
@@ -73,12 +75,14 @@ func NewS3Storage(ctx context.Context, cfg S3Config, logger *log.Logger) (*S3Sto
 	storage := &S3Storage{
 		client: client,
 		bucket: cfg.Bucket,
+		prefix: cfg.Prefix,
 		logger: logger,
 	}
 
 	logger.Info(traceID, "S3 storage initialized", nil,
 		log.String("bucket", cfg.Bucket),
 		log.String("region", cfg.Region),
+		log.String("prefix", cfg.Prefix),
 	)
 
 	return storage, nil
@@ -105,10 +109,10 @@ func (s *S3Storage) Upload(ctx context.Context, file io.Reader, filename string,
 		return fmt.Errorf("unable to read file: %w", err)
 	}
 
-	// Build the key path
+	// Build the key path using configured prefix
 	key := filename
-	if opts.FolderID != "" {
-		key = filepath.Join(opts.FolderID, filename)
+	if s.prefix != "" {
+		key = filepath.Join(s.prefix, filename)
 	}
 
 	// Determine content type
@@ -149,27 +153,33 @@ func (s *S3Storage) Download(ctx context.Context, filename string) (io.ReadClose
 	traceID := traceid.FromContext(ctx)
 	startTime := time.Now()
 
+	// Build the key path using configured prefix
+	key := filename
+	if s.prefix != "" {
+		key = filepath.Join(s.prefix, filename)
+	}
+
 	s.logger.Info(traceID, "Starting S3 download", nil,
-		log.String("key", filename),
+		log.String("key", key),
 		log.String("bucket", s.bucket),
 		log.String("component", "s3-storage"),
 	)
 
 	output, err := s.client.GetObject(ctx, &s3.GetObjectInput{
 		Bucket: aws.String(s.bucket),
-		Key:    aws.String(filename),
+		Key:    aws.String(key),
 	})
 	if err != nil {
 		s.logger.Error(traceID, "Failed to download file from S3", nil,
 			log.Error(err),
-			log.String("key", filename),
+			log.String("key", key),
 			log.String("component", "s3-storage"),
 		)
 		return nil, fmt.Errorf("unable to download file from S3: %w", err)
 	}
 
 	s.logger.Info(traceID, "S3 download completed", nil,
-		log.String("key", filename),
+		log.String("key", key),
 		log.String("component", "s3-storage"),
 		log.String("duration", time.Since(startTime).String()),
 	)
@@ -182,27 +192,33 @@ func (s *S3Storage) Delete(ctx context.Context, filename string) error {
 	traceID := traceid.FromContext(ctx)
 	startTime := time.Now()
 
+	// Build the key path using configured prefix
+	key := filename
+	if s.prefix != "" {
+		key = filepath.Join(s.prefix, filename)
+	}
+
 	s.logger.Info(traceID, "Starting S3 delete", nil,
-		log.String("key", filename),
+		log.String("key", key),
 		log.String("bucket", s.bucket),
 		log.String("component", "s3-storage"),
 	)
 
 	_, err := s.client.DeleteObject(ctx, &s3.DeleteObjectInput{
 		Bucket: aws.String(s.bucket),
-		Key:    aws.String(filename),
+		Key:    aws.String(key),
 	})
 	if err != nil {
 		s.logger.Error(traceID, "Failed to delete file from S3", nil,
 			log.Error(err),
-			log.String("key", filename),
+			log.String("key", key),
 			log.String("component", "s3-storage"),
 		)
 		return fmt.Errorf("unable to delete file from S3: %w", err)
 	}
 
 	s.logger.Info(traceID, "S3 delete completed", nil,
-		log.String("key", filename),
+		log.String("key", key),
 		log.String("component", "s3-storage"),
 		log.String("duration", time.Since(startTime).String()),
 	)
@@ -226,14 +242,16 @@ func (s *S3Storage) List(ctx context.Context, opts ListOptions) ([]FileInfo, err
 		Bucket: aws.String(s.bucket),
 	}
 
-	if opts.FolderID != "" {
-		input.Prefix = aws.String(opts.FolderID + "/")
+	// Use configured prefix as base
+	if s.prefix != "" {
+		input.Prefix = aws.String(s.prefix + "/")
 	}
 
+	// Append additional prefix if provided in opts
 	if opts.Prefix != "" {
 		prefix := opts.Prefix
-		if opts.FolderID != "" {
-			prefix = opts.FolderID + "/" + opts.Prefix
+		if s.prefix != "" {
+			prefix = s.prefix + "/" + opts.Prefix
 		}
 		input.Prefix = aws.String(prefix)
 	}

@@ -35,6 +35,9 @@ type Config struct {
 	BACKUP_DIR     string `mapstructure:"BACKUP_DIR" default:"backups/postgres"`
 	BACKUP_TIMEOUT string `mapstructure:"BACKUP_TIMEOUT" default:"30m"`
 
+	// Retention
+	BACKUP_RETENTION_DAYS int `mapstructure:"BACKUP_RETENTION_DAYS" default:"30"`
+
 	// Scheduler
 	CRON_SCHEDULE      string `mapstructure:"CRON_SCHEDULE" default:""`
 	SCHEDULER_TIMEZONE string `mapstructure:"SCHEDULER_TIMEZONE" default:"UTC"`

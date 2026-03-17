@@ -119,6 +119,13 @@ func main() {
 		os.Exit(1)
 	}
 
+	// Add cleanup job (same schedule as backup)
+	cleanupJob := backup.NewCleanupJob(backupService)
+	if err := cronScheduler.AddJob(cfg.CRON_SCHEDULE, cleanupJob); err != nil {
+		logger.Error(traceID, "Failed to add cleanup job", nil, log.Error(err))
+		os.Exit(1)
+	}
+
 	logger.Info(traceID, "Scheduler configured", nil,
 		log.String("schedule", cfg.CRON_SCHEDULE),
 		log.String("timezone", cfg.SCHEDULER_TIMEZONE),

@@ -27,7 +27,7 @@ build-all:
 
 ## test: Run all tests
 test:
-	$(GO) test ./...
+	$(GO) test -cover ./...
 
 ## test-verbose: Run tests with verbose output
 test-verbose:

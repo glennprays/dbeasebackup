@@ -314,12 +314,13 @@ func (s *Service) Cleanup(ctx context.Context) error {
 	}
 
 	if len(records) == 0 {
-		s.logger.Info(traceID, "No old backups to clean up", nil)
+		s.logger.Info(traceID, "No old backups to clean up", nil, log.Any("cutoff", cutoff))
 		return nil
 	}
 
 	s.logger.Info(traceID, "Found old backups to delete", nil,
 		log.Int("count", len(records)),
+		log.Any("cutoff", cutoff),
 	)
 
 	// Delete each backup

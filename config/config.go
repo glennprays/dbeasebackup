@@ -49,6 +49,9 @@ type Config struct {
 	LOG_LEVEL  string `mapstructure:"LOG_LEVEL" default:"info"`
 	LOG_FORMAT string `mapstructure:"LOG_FORMAT" default:"text"`
 
+	// Health Endpoint
+	HTTP_PORT int `mapstructure:"HTTP_PORT" default:"8080"`
+
 	// Google Drive
 	GOOGLE_DRIVE_FOLDER_ID string `mapstructure:"GOOGLE_DRIVE_FOLDER_ID" default:""`
 	GOOGLE_DRIVE_KEY_FILE  string `mapstructure:"GOOGLE_DRIVE_KEY_FILE" default:"service-account-key.json"`

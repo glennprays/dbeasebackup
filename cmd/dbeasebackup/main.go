@@ -9,6 +9,7 @@ import (
 
 	"github.com/glennprays/dbeasebackup/config"
 	"github.com/glennprays/dbeasebackup/internal/backup"
+	"github.com/glennprays/dbeasebackup/internal/health"
 	backupprovider "github.com/glennprays/dbeasebackup/pkg/backup"
 	"github.com/glennprays/dbeasebackup/pkg/database"
 	"github.com/glennprays/dbeasebackup/pkg/scheduler"
@@ -106,6 +107,17 @@ func main() {
 
 	logger.Info(traceID, "Backup service initialized", nil)
 
+	// Initialize health check server
+	healthServer := health.NewServer(backupService, logger)
+	if err := healthServer.Start(cfg.HTTP_PORT); err != nil {
+		logger.Error(traceID, "Failed to start health server", nil, log.Error(err))
+		os.Exit(1)
+	}
+
+	logger.Info(traceID, "Health check server started", nil,
+		log.Int("port", cfg.HTTP_PORT),
+	)
+
 	// Initialize scheduler
 	cronScheduler, err := scheduler.NewCronScheduler(cfg, logger)
 	if err != nil {
@@ -141,7 +153,7 @@ func main() {
 	fmt.Println("Database Auto Backup Service Started...")
 
 	// Wait for shutdown signal
-	waitForShutdown(logger, cronScheduler)
+	waitForShutdown(logger, cronScheduler, healthServer)
 }
 
 // initializeBackupProvider creates the appropriate backup provider based on configuration
@@ -216,7 +228,7 @@ func parseLogLevel(level string) log.Level {
 }
 
 // waitForShutdown blocks until a shutdown signal is received
-func waitForShutdown(logger *log.Logger, sched *scheduler.CronScheduler) {
+func waitForShutdown(logger *log.Logger, sched *scheduler.CronScheduler, healthServer *health.Server) {
 	traceID := "shutdown"
 
 	sigChan := make(chan os.Signal, 1)
@@ -228,8 +240,13 @@ func waitForShutdown(logger *log.Logger, sched *scheduler.CronScheduler) {
 	)
 	fmt.Printf("\nReceived %v, shutting down...\n", sig)
 
-	// Stop the scheduler
+	// Stop the health server
 	ctx := context.Background()
+	if err := healthServer.Stop(ctx); err != nil {
+		logger.Error(traceID, "Error stopping health server", nil, log.Error(err))
+	}
+
+	// Stop the scheduler
 	if err := sched.Stop(ctx); err != nil {
 		logger.Error(traceID, "Error stopping scheduler", nil, log.Error(err))
 	}

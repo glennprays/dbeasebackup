@@ -59,9 +59,13 @@ docker run -d \
   --name dbeasebackup \
   --env-file .env \
   -v $(pwd)/service-account-key.json:/service-account-key.json \
+  -p 8080:8080 \
   --network host \
   glennprays/dbeasebackup:latest
 ```
+
+# 4. Verify health check
+curl http://localhost:8080/health
 
 For detailed setup instructions, see the [example directory](./example).
 
@@ -168,6 +172,8 @@ DBEaseBackup is configured entirely through environment variables:
 | **Logging** |
 | `LOG_LEVEL` | Log level (`debug`, `info`, `warn`, `error`) | `info` | No |
 | `LOG_FORMAT` | Log format (`json` or `text`) | `text` | No |
+| **Health Check** |
+| `HTTP_PORT` | Health check endpoint port (set to `0` to disable) | `8080` | No |
 
 *Required when using that storage type
 
@@ -261,7 +267,45 @@ export $(cat .env | xargs)
 
 ### Health Checks
 
-The application validates configuration at startup and will exit with an error if required variables are missing or invalid.
+The application provides HTTP endpoints for health monitoring and Kubernetes integration:
+
+| Endpoint | Purpose | Behavior |
+|----------|---------|----------|
+| `GET /health` | Comprehensive health check | Checks database and storage, returns 200 if healthy |
+| `GET /readyz` | Kubernetes readiness probe | Returns `{"ready": true}` if all systems healthy |
+| `GET /livez` | Kubernetes liveness probe | Returns `{"alive": true}` if server process is running |
+
+**Docker port mapping:**
+```bash
+# Map port 8080 to access health checks from outside container
+docker run -p 8080:8080 glennprays/dbeasebackup:latest
+```
+
+**Kubernetes probes example:**
+```yaml
+livenessProbe:
+  httpGet:
+    path: /livez
+    port: 8080
+  initialDelaySeconds: 10
+  periodSeconds: 10
+
+readinessProbe:
+  httpGet:
+    path: /readyz
+    port: 8080
+  initialDelaySeconds: 5
+  periodSeconds: 5
+```
+
+**Testing health endpoint:**
+```bash
+curl http://localhost:8080/health
+curl http://localhost:8080/readyz
+curl http://localhost:8080/livez
+```
+
+**Note:** The application validates configuration at startup and will exit with an error if required variables are missing or invalid.
 
 ## Backup Management
 

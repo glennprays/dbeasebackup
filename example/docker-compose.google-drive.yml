@@ -4,8 +4,14 @@ services:
     container_name: dbeasebackup-container
     env_file:
       - .env
+    environment:
+      # Override default health check port if needed
+      - HTTP_PORT=${HTTP_PORT:-8080}
     volumes:
       - ./service-account-key.json:/service-account-key.json
+    ports:
+      # Map health check port for external access
+      - "${HTTP_PORT:-8080}:8080"
     network_mode: host
 
 

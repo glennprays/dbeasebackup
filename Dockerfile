@@ -39,5 +39,8 @@ WORKDIR /
 # Set the environment variable to production
 ENV ENV=production
 
+# Expose health check port (can be overridden with HTTP_PORT env var)
+EXPOSE 8080
+
 # Command to run the Go application
 CMD ["/dbeasebackup"]

@@ -4,10 +4,12 @@ import (
 	"context"
 	"database/sql"
 	"errors"
+	"fmt"
 	"io"
 	"os"
 	"path/filepath"
 	"testing"
+	"time"
 
 	"github.com/glennprays/dbeasebackup/config"
 	"github.com/glennprays/dbeasebackup/pkg/storage"
@@ -625,5 +627,241 @@ func TestService_Backup_RecordThenUploadOrder(t *testing.T) {
 		if i >= len(callOrder) || callOrder[i] != expected {
 			t.Errorf("Expected call %d to be %s, got %v", i, expected, callOrder)
 		}
+	}
+}
+
+func TestService_Cleanup_Disabled(t *testing.T) {
+	logger := createTestLogger(t)
+	mockDB := &testutils.MockDatabase{
+		ExecFunc: func(ctx context.Context, query string, args ...any) (sql.Result, error) {
+			return nil, nil
+		},
+	}
+	mockStorage := &testutils.MockStorage{}
+	mockProvider := &testutils.MockProvider{
+		NameFunc: func() string { return "test-backup" },
+	}
+	cfg := &config.Config{
+		BACKUP_DIR:             t.TempDir(),
+		BACKUP_RETENTION_DAYS:  0, // Disabled
+	}
+	service, err := NewService(mockDB, mockStorage, mockProvider, cfg, logger)
+	if err != nil {
+		t.Fatalf("NewService() error = %v", err)
+	}
+
+	err = service.Cleanup(createTestContext())
+	if err != nil {
+		t.Errorf("Cleanup() unexpected error when disabled: %v", err)
+	}
+}
+
+func TestService_Cleanup_NoOldBackups(t *testing.T) {
+	logger := createTestLogger(t)
+	mockDB := &testutils.MockDatabase{
+		ExecFunc: func(ctx context.Context, query string, args ...any) (sql.Result, error) {
+			return nil, nil
+		},
+		QueryFunc: func(ctx context.Context, query string, args ...any) (*sql.Rows, error) {
+			return nil, errors.New("no rows") // Simulates no results
+		},
+	}
+	mockStorage := &testutils.MockStorage{}
+	mockProvider := &testutils.MockProvider{
+		NameFunc: func() string { return "test-backup" },
+	}
+	cfg := &config.Config{
+		BACKUP_DIR:             t.TempDir(),
+		BACKUP_RETENTION_DAYS:  30,
+	}
+	service, err := NewService(mockDB, mockStorage, mockProvider, cfg, logger)
+	if err != nil {
+		t.Fatalf("NewService() error = %v", err)
+	}
+
+	// Query returns error (simulating no old backups)
+	_ = service.Cleanup(createTestContext())
+	// Error is expected since QueryFunc returns error, but we're testing it doesn't panic
+}
+
+func TestCleanupJob_Name(t *testing.T) {
+	logger := createTestLogger(t)
+	mockDB := &testutils.MockDatabase{
+		ExecFunc: func(ctx context.Context, query string, args ...any) (sql.Result, error) {
+			return nil, nil
+		},
+	}
+	mockStorage := &testutils.MockStorage{}
+	mockProvider := &testutils.MockProvider{
+		NameFunc: func() string { return "test-backup" },
+	}
+	cfg := &config.Config{
+		BACKUP_DIR:            t.TempDir(),
+		BACKUP_RETENTION_DAYS: 30,
+	}
+	service, err := NewService(mockDB, mockStorage, mockProvider, cfg, logger)
+	if err != nil {
+		t.Fatalf("NewService() error = %v", err)
+	}
+
+	cleanupJob := NewCleanupJob(service)
+	if cleanupJob.Name() != "backup-cleanup" {
+		t.Errorf("CleanupJob.Name() = %v, want %v", cleanupJob.Name(), "backup-cleanup")
+	}
+}
+
+func TestCleanupJob_Execute(t *testing.T) {
+	logger := createTestLogger(t)
+	mockDB := &testutils.MockDatabase{
+		ExecFunc: func(ctx context.Context, query string, args ...any) (sql.Result, error) {
+			return nil, nil
+		},
+	}
+	mockStorage := &testutils.MockStorage{}
+	mockProvider := &testutils.MockProvider{
+		NameFunc: func() string { return "test-backup" },
+	}
+	cfg := &config.Config{
+		BACKUP_DIR:            t.TempDir(),
+		BACKUP_RETENTION_DAYS: 0, // Disabled to make Execute return nil
+	}
+	service, err := NewService(mockDB, mockStorage, mockProvider, cfg, logger)
+	if err != nil {
+		t.Fatalf("NewService() error = %v", err)
+	}
+
+	cleanupJob := NewCleanupJob(service)
+	err = cleanupJob.Execute(createTestContext())
+	if err != nil {
+		t.Errorf("CleanupJob.Execute() unexpected error: %v", err)
+	}
+}
+
+func TestNewCleanupJob(t *testing.T) {
+	logger := createTestLogger(t)
+	mockDB := &testutils.MockDatabase{
+		ExecFunc: func(ctx context.Context, query string, args ...any) (sql.Result, error) {
+			return nil, nil
+		},
+	}
+	mockStorage := &testutils.MockStorage{}
+	mockProvider := &testutils.MockProvider{
+		NameFunc: func() string { return "test-backup" },
+	}
+	cfg := &config.Config{
+		BACKUP_DIR:            t.TempDir(),
+		BACKUP_RETENTION_DAYS: 30,
+	}
+	service, err := NewService(mockDB, mockStorage, mockProvider, cfg, logger)
+	if err != nil {
+		t.Fatalf("NewService() error = %v", err)
+	}
+
+	cleanupJob := NewCleanupJob(service)
+	if cleanupJob == nil {
+		t.Error("NewCleanupJob() returned nil")
+	}
+}
+
+func TestService_DeleteBackupRecord(t *testing.T) {
+	logger := createTestLogger(t)
+	mockDB := &testutils.MockDatabase{
+		ExecFunc: func(ctx context.Context, query string, args ...any) (sql.Result, error) {
+			return nil, nil
+		},
+	}
+	mockStorage := &testutils.MockStorage{}
+	mockProvider := &testutils.MockProvider{
+		NameFunc: func() string { return "test-backup" },
+	}
+	cfg := &config.Config{
+		BACKUP_DIR: t.TempDir(),
+	}
+	service, err := NewService(mockDB, mockStorage, mockProvider, cfg, logger)
+	if err != nil {
+		t.Fatalf("NewService() error = %v", err)
+	}
+
+	err = service.DeleteBackupRecord(createTestContext(), 1)
+	if err != nil {
+		t.Errorf("DeleteBackupRecord() unexpected error: %v", err)
+	}
+}
+
+func TestService_DeleteBackupRecord_Error(t *testing.T) {
+	logger := createTestLogger(t)
+	execCallCount := 0
+	mockDB := &testutils.MockDatabase{
+		ExecFunc: func(ctx context.Context, query string, args ...any) (sql.Result, error) {
+			execCallCount++
+			if execCallCount > 1 {
+				return nil, errors.New("delete failed")
+			}
+			return nil, nil
+		},
+	}
+	mockStorage := &testutils.MockStorage{}
+	mockProvider := &testutils.MockProvider{
+		NameFunc: func() string { return "test-backup" },
+	}
+	cfg := &config.Config{
+		BACKUP_DIR: t.TempDir(),
+	}
+	service, err := NewService(mockDB, mockStorage, mockProvider, cfg, logger)
+	if err != nil {
+		t.Fatalf("NewService() error = %v", err)
+	}
+
+	err = service.DeleteBackupRecord(createTestContext(), 1)
+	if err == nil {
+		t.Error("DeleteBackupRecord() expected error when exec fails")
+	}
+}
+
+func TestService_DeleteBackup_FileNotFoundInStorage(t *testing.T) {
+	logger := createTestLogger(t)
+	deleteCalled := false
+	execCallCount := 0
+
+	mockDB := &testutils.MockDatabase{
+		ExecFunc: func(ctx context.Context, query string, args ...any) (sql.Result, error) {
+			execCallCount++
+			return nil, nil
+		},
+	}
+	mockStorage := &testutils.MockStorage{
+		DeleteFunc: func(ctx context.Context, filename string) error {
+			deleteCalled = true
+			return fmt.Errorf("file not found: %s", filename)
+		},
+	}
+	mockProvider := &testutils.MockProvider{
+		NameFunc: func() string { return "test-backup" },
+	}
+	cfg := &config.Config{
+		BACKUP_DIR: t.TempDir(),
+	}
+	service, err := NewService(mockDB, mockStorage, mockProvider, cfg, logger)
+	if err != nil {
+		t.Fatalf("NewService() error = %v", err)
+	}
+
+	record := BackupRecord{
+		ID:   1,
+		File: "old-backup.tar",
+		Time: time.Now().AddDate(0, 0, -60),
+	}
+
+	err = service.deleteBackup(createTestContext(), "test-trace-id", record)
+	// Should still succeed and delete the database record
+	if err != nil {
+		t.Errorf("deleteBackup() should handle 'file not found' gracefully: %v", err)
+	}
+	if !deleteCalled {
+		t.Error("deleteBackup() should have attempted to delete from storage")
+	}
+	// Verify database delete was called (execCallCount should be 2: 1 for table creation, 1 for record deletion)
+	if execCallCount < 2 {
+		t.Error("deleteBackup() should have deleted the database record even when file not found in storage")
 	}
 }

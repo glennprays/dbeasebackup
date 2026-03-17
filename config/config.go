@@ -35,6 +35,12 @@ type Config struct {
 	BACKUP_DIR     string `mapstructure:"BACKUP_DIR" default:"backups/postgres"`
 	BACKUP_TIMEOUT string `mapstructure:"BACKUP_TIMEOUT" default:"30m"`
 
+	// Retention
+	BACKUP_RETENTION_DAYS int `mapstructure:"BACKUP_RETENTION_DAYS" default:"30"`
+
+	// Verification
+	BACKUP_VERIFY bool `mapstructure:"BACKUP_VERIFY" default:"true"`
+
 	// Scheduler
 	CRON_SCHEDULE      string `mapstructure:"CRON_SCHEDULE" default:""`
 	SCHEDULER_TIMEZONE string `mapstructure:"SCHEDULER_TIMEZONE" default:"UTC"`
@@ -42,6 +48,9 @@ type Config struct {
 	// Logging
 	LOG_LEVEL  string `mapstructure:"LOG_LEVEL" default:"info"`
 	LOG_FORMAT string `mapstructure:"LOG_FORMAT" default:"text"`
+
+	// Health Endpoint
+	HTTP_PORT int `mapstructure:"HTTP_PORT" default:"8080"`
 
 	// Google Drive
 	GOOGLE_DRIVE_FOLDER_ID string `mapstructure:"GOOGLE_DRIVE_FOLDER_ID" default:""`

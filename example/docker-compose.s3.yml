@@ -23,4 +23,9 @@ services:
       - BACKUP_TIMEOUT=${BACKUP_TIMEOUT:-30m}
       # Optional: Timezone
       - SCHEDULER_TIMEZONE=${SCHEDULER_TIMEZONE:-UTC}
+      # Health Check Port
+      - HTTP_PORT=${HTTP_PORT:-8080}
+    ports:
+      # Map health check port for external access
+      - "${HTTP_PORT:-8080}:8080"
     network_mode: host

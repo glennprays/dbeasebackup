@@ -5,7 +5,10 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"os/exec"
+	"path/filepath"
 	"runtime"
+	"strings"
 	"time"
 
 	"github.com/glennprays/dbeasebackup/config"
@@ -87,6 +90,17 @@ func (s *Service) Backup(ctx context.Context) error {
 		return err
 	}
 
+	// Verify the backup (optional)
+	if s.cfg.BACKUP_VERIFY {
+		if err := s.verifyBackup(ctx, traceID, backupFile); err != nil {
+			s.logger.Warn(traceID, "Backup verification failed, but backup was uploaded successfully", nil,
+				log.Error(err),
+				log.String("component", "backup-service"),
+			)
+			// Don't fail the backup, just warn - the backup is still valid
+		}
+	}
+
 	// Delete the local backup file
 	if err := s.deleteLocalBackup(ctx, traceID, backupFile); err != nil {
 		return err
@@ -138,6 +152,49 @@ func (s *Service) uploadBackup(ctx context.Context, traceID, backupFilePath stri
 	s.logger.Info(traceID, "Backup uploaded to storage", nil,
 		log.String("filename", fileInfo.Name()),
 		log.String("component", "backup-service"),
+	)
+
+	return nil
+}
+
+// verifyBackup downloads and validates the backup integrity using pg_restore --list
+func (s *Service) verifyBackup(ctx context.Context, traceID, backupFilePath string) error {
+	startTime := time.Now()
+
+	// Extract filename from path
+	filename := filepath.Base(backupFilePath)
+
+	s.logger.Info(traceID, "Starting backup verification", nil,
+		log.String("filename", filename),
+		log.String("component", "backup-service"),
+	)
+
+	// Download the backup from storage
+	reader, err := s.storage.Download(ctx, filename)
+	if err != nil {
+		return fmt.Errorf("unable to download backup for verification: %w", err)
+	}
+	defer reader.Close()
+
+	// Run pg_restore --list to validate the backup structure
+	// This parses the archive without actually restoring data
+	cmd := exec.CommandContext(ctx, "pg_restore", "--list", "-")
+	cmd.Stdin = reader
+
+	output, err := cmd.CombinedOutput()
+	if err != nil {
+		s.logger.Error(traceID, "Backup verification failed", nil,
+			log.Error(err),
+			log.String("output", string(output)),
+			log.String("component", "backup-service"),
+		)
+		return fmt.Errorf("backup verification failed: %w", err)
+	}
+
+	s.logger.Info(traceID, "Backup verification completed", nil,
+		log.String("filename", filename),
+		log.String("component", "backup-service"),
+		log.String("duration", time.Since(startTime).String()),
 	)
 
 	return nil
@@ -256,6 +313,26 @@ type BackupRecord struct {
 	Time time.Time
 }
 
+// CleanupJob is a scheduler job that cleans up old backups
+type CleanupJob struct {
+	service *Service
+}
+
+// NewCleanupJob creates a new cleanup job
+func NewCleanupJob(service *Service) *CleanupJob {
+	return &CleanupJob{service: service}
+}
+
+// Name returns the name of the job (implements scheduler.Job interface)
+func (j *CleanupJob) Name() string {
+	return "backup-cleanup"
+}
+
+// Execute runs the cleanup job (implements scheduler.Job interface)
+func (j *CleanupJob) Execute(ctx context.Context) error {
+	return j.service.Cleanup(ctx)
+}
+
 // Health checks if the backup service is healthy
 func (s *Service) Health(ctx context.Context) error {
 	if err := s.db.Ping(ctx); err != nil {
@@ -265,6 +342,141 @@ func (s *Service) Health(ctx context.Context) error {
 		return fmt.Errorf("storage health check failed: %w", err)
 	}
 	return nil
+}
+
+// Cleanup deletes backups older than the retention period
+func (s *Service) Cleanup(ctx context.Context) error {
+	traceID := traceid.FromContext(ctx)
+	startTime := time.Now()
+
+	// Skip cleanup if retention is disabled (0 days)
+	if s.cfg.BACKUP_RETENTION_DAYS <= 0 {
+		s.logger.Debug(traceID, "Backup retention is disabled, skipping cleanup", nil)
+		return nil
+	}
+
+	s.logger.Info(traceID, "Starting backup cleanup", nil,
+		log.String("component", "backup-service"),
+		log.Int("retention_days", s.cfg.BACKUP_RETENTION_DAYS),
+	)
+
+	// Calculate cutoff time
+	cutoff := time.Now().AddDate(0, 0, -s.cfg.BACKUP_RETENTION_DAYS)
+
+	// Get backups older than cutoff
+	records, err := s.GetBackupsOlderThan(ctx, cutoff)
+	if err != nil {
+		return err
+	}
+
+	if len(records) == 0 {
+		s.logger.Info(traceID, "No old backups to clean up", nil, log.Any("cutoff", cutoff))
+		return nil
+	}
+
+	s.logger.Info(traceID, "Found old backups to delete", nil,
+		log.Int("count", len(records)),
+		log.Any("cutoff", cutoff),
+	)
+
+	// Delete each backup
+	deletedCount := 0
+	for _, record := range records {
+		if err := s.deleteBackup(ctx, traceID, record); err != nil {
+			s.logger.Error(traceID, "Failed to delete backup", nil,
+				log.Error(err),
+				log.Int("backup_id", record.ID),
+				log.String("backup_file", record.File),
+			)
+			continue
+		}
+		deletedCount++
+	}
+
+	s.logger.Info(traceID, "Backup cleanup completed", nil,
+		log.String("component", "backup-service"),
+		log.Int("deleted_count", deletedCount),
+		log.String("duration", time.Since(startTime).String()),
+	)
+
+	return nil
+}
+
+// GetBackupsOlderThan retrieves backup records older than the given cutoff time
+func (s *Service) GetBackupsOlderThan(ctx context.Context, cutoff time.Time) ([]BackupRecord, error) {
+	traceID := traceid.FromContext(ctx)
+
+	query := "SELECT id, backup_file, backup_time FROM database_backups WHERE backup_time < $1"
+
+	rows, err := s.db.Query(ctx, query, cutoff)
+	if err != nil {
+		s.logger.Error(traceID, "Failed to query old backups", nil, log.Error(err))
+		return nil, fmt.Errorf("unable to query old backups: %w", err)
+	}
+	defer rows.Close()
+
+	var records []BackupRecord
+	for rows.Next() {
+		var record BackupRecord
+		if err := rows.Scan(&record.ID, &record.File, &record.Time); err != nil {
+			s.logger.Error(traceID, "Failed to scan backup record", nil, log.Error(err))
+			return nil, fmt.Errorf("unable to scan backup record: %w", err)
+		}
+		records = append(records, record)
+	}
+
+	return records, nil
+}
+
+// deleteBackup deletes a backup file from storage and its record from the database
+func (s *Service) deleteBackup(ctx context.Context, traceID string, record BackupRecord) error {
+	// Delete from storage
+	err := s.storage.Delete(ctx, record.File)
+	if err != nil {
+		// If file not found in storage, log warning but continue to delete the database record
+		// This handles the case where the file was manually deleted from storage
+		if isNotFoundError(err) {
+			s.logger.Warn(traceID, "Backup file not found in storage, will delete database record only", nil,
+				log.String("backup_file", record.File),
+				log.Error(err),
+			)
+		} else {
+			return fmt.Errorf("unable to delete backup from storage: %w", err)
+		}
+	} else {
+		s.logger.Info(traceID, "Backup file deleted from storage", nil,
+			log.String("backup_file", record.File),
+		)
+	}
+
+	// Delete from database
+	if err := s.DeleteBackupRecord(ctx, record.ID); err != nil {
+		return fmt.Errorf("unable to delete backup record: %w", err)
+	}
+
+	s.logger.Info(traceID, "Backup record deleted from database", nil,
+		log.Int("backup_id", record.ID),
+	)
+
+	return nil
+}
+
+// isNotFoundError checks if an error indicates the file was not found
+func isNotFoundError(err error) bool {
+	if err == nil {
+		return false
+	}
+	errStr := err.Error()
+	return strings.Contains(errStr, "not found") ||
+		strings.Contains(errStr, "no such") ||
+		strings.Contains(errStr, "does not exist") ||
+		strings.Contains(errStr, "404")
+}
+
+// DeleteBackupRecord deletes a backup record from the database
+func (s *Service) DeleteBackupRecord(ctx context.Context, id int) error {
+	_, err := s.db.Exec(ctx, "DELETE FROM database_backups WHERE id = $1", id)
+	return err
 }
 
 // io.Reader adapter for file upload

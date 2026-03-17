@@ -28,6 +28,7 @@ This document provides comprehensive configuration details for DBEaseBackup.
 | `BACKUP_PROVIDER` | string | `postgres` | No | Backup provider type. Currently only `postgres` is supported. |
 | `BACKUP_DIR` | string | `backups/postgres` | No | Local directory for temporary backup files. Files are deleted after successful upload. |
 | `BACKUP_TIMEOUT` | string | `30m` | No | Timeout for backup operations. Go duration format: `30m`, `1h`, `2h30m`. Increase for large databases. |
+| `BACKUP_RETENTION_DAYS` | int | `30` | No | Number of days to keep backups before automatic deletion. Set to `0` to disable retention and keep all backups indefinitely. |
 | **Scheduler Configuration** |
 | `CRON_SCHEDULE` | string | - | Yes | Cron expression for backup schedule. Standard 5-field format. |
 | `SCHEDULER_TIMEZONE` | string | `UTC` | No | Timezone for cron job execution. Use IANA timezone names. |

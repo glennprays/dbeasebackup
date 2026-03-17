@@ -1,24 +1,22 @@
 package storage
 
 import (
-	"bytes"
 	"context"
 	"fmt"
 	"io"
 	"path/filepath"
+	"strings"
 	"time"
 
-	"github.com/aws/aws-sdk-go-v2/aws"
-	"github.com/aws/aws-sdk-go-v2/config"
-	"github.com/aws/aws-sdk-go-v2/credentials"
-	"github.com/aws/aws-sdk-go-v2/service/s3"
 	"github.com/glennprays/dbeasebackup/pkg/traceid"
 	"github.com/glennprays/log"
+	"github.com/minio/minio-go/v7"
+	"github.com/minio/minio-go/v7/pkg/credentials"
 )
 
 // S3Storage implements the Storage interface for S3-compatible storage
 type S3Storage struct {
-	client *s3.Client
+	client *minio.Client
 	bucket string
 	prefix string
 	logger *log.Logger
@@ -34,43 +32,24 @@ type S3Config struct {
 	Prefix          string // Folder prefix for all uploads (e.g., "backups/postgres")
 }
 
-// NewS3Storage creates a new S3 storage provider
+// NewS3Storage creates a new S3 storage provider using MinIO SDK
 func NewS3Storage(ctx context.Context, cfg S3Config, logger *log.Logger) (*S3Storage, error) {
 	traceID := "s3-storage-init"
 
-	// Create custom options for AWS config
-	var opts []func(*config.LoadOptions) error
+	// Parse endpoint to determine if SSL should be used
+	useSSL := strings.HasPrefix(cfg.Endpoint, "https://")
+	endpoint := strings.TrimPrefix(strings.TrimPrefix(cfg.Endpoint, "https://"), "http://")
 
-	// Set region
-	if cfg.Region != "" {
-		opts = append(opts, config.WithRegion(cfg.Region))
-	}
-
-	// Set credentials
-	if cfg.AccessKeyID != "" && cfg.SecretAccessKey != "" {
-		opts = append(opts, config.WithCredentialsProvider(credentials.NewStaticCredentialsProvider(
-			cfg.AccessKeyID,
-			cfg.SecretAccessKey,
-			"",
-		)))
-	}
-
-	// Load default config
-	awsCfg, err := config.LoadDefaultConfig(ctx, opts...)
+	// Create MinIO client
+	client, err := minio.New(endpoint, &minio.Options{
+		Creds:  credentials.NewStaticV4(cfg.AccessKeyID, cfg.SecretAccessKey, ""),
+		Secure: useSSL,
+		Region: cfg.Region,
+	})
 	if err != nil {
-		logger.Error(traceID, "Failed to load AWS config", nil, log.Error(err))
-		return nil, fmt.Errorf("unable to load AWS config: %w", err)
+		logger.Error(traceID, "Failed to create S3 client", nil, log.Error(err))
+		return nil, fmt.Errorf("unable to create S3 client: %w", err)
 	}
-
-	// Create S3 client with optional custom endpoint
-	var clientOpts []func(*s3.Options)
-	if cfg.Endpoint != "" {
-		clientOpts = append(clientOpts, func(o *s3.Options) {
-			o.BaseEndpoint = aws.String(cfg.Endpoint)
-		})
-	}
-
-	client := s3.NewFromConfig(awsCfg, clientOpts...)
 
 	storage := &S3Storage{
 		client: client,
@@ -82,7 +61,9 @@ func NewS3Storage(ctx context.Context, cfg S3Config, logger *log.Logger) (*S3Sto
 	logger.Info(traceID, "S3 storage initialized", nil,
 		log.String("bucket", cfg.Bucket),
 		log.String("region", cfg.Region),
+		log.String("endpoint", endpoint),
 		log.String("prefix", cfg.Prefix),
+		log.Bool("useSSL", useSSL),
 	)
 
 	return storage, nil
@@ -99,16 +80,6 @@ func (s *S3Storage) Upload(ctx context.Context, file io.Reader, filename string,
 		log.String("component", "s3-storage"),
 	)
 
-	// Read the file content to determine size and for retry capability
-	content, err := io.ReadAll(file)
-	if err != nil {
-		s.logger.Error(traceID, "Failed to read file content", nil,
-			log.Error(err),
-			log.String("component", "s3-storage"),
-		)
-		return fmt.Errorf("unable to read file: %w", err)
-	}
-
 	// Build the key path using configured prefix
 	key := filename
 	if s.prefix != "" {
@@ -121,14 +92,12 @@ func (s *S3Storage) Upload(ctx context.Context, file io.Reader, filename string,
 		contentType = "application/octet-stream"
 	}
 
-	// Upload to S3
-	_, err = s.client.PutObject(ctx, &s3.PutObjectInput{
-		Bucket:        aws.String(s.bucket),
-		Key:           aws.String(key),
-		Body:          bytes.NewReader(content),
-		ContentLength: aws.Int64(int64(len(content))),
-		ContentType:   aws.String(contentType),
-	})
+	// Upload to S3 using MinIO SDK (supports streaming directly)
+	info, err := s.client.PutObject(ctx, s.bucket, key, file, -1,
+		minio.PutObjectOptions{
+			ContentType: contentType,
+		},
+	)
 	if err != nil {
 		s.logger.Error(traceID, "Failed to upload file to S3", nil,
 			log.Error(err),
@@ -140,7 +109,8 @@ func (s *S3Storage) Upload(ctx context.Context, file io.Reader, filename string,
 
 	s.logger.Info(traceID, "S3 upload completed", nil,
 		log.String("key", key),
-		log.Int("size", len(content)),
+		log.Int64("size", info.Size),
+		log.String("etag", info.ETag),
 		log.String("component", "s3-storage"),
 		log.String("duration", time.Since(startTime).String()),
 	)
@@ -165,10 +135,7 @@ func (s *S3Storage) Download(ctx context.Context, filename string) (io.ReadClose
 		log.String("component", "s3-storage"),
 	)
 
-	output, err := s.client.GetObject(ctx, &s3.GetObjectInput{
-		Bucket: aws.String(s.bucket),
-		Key:    aws.String(key),
-	})
+	object, err := s.client.GetObject(ctx, s.bucket, key, minio.GetObjectOptions{})
 	if err != nil {
 		s.logger.Error(traceID, "Failed to download file from S3", nil,
 			log.Error(err),
@@ -184,7 +151,7 @@ func (s *S3Storage) Download(ctx context.Context, filename string) (io.ReadClose
 		log.String("duration", time.Since(startTime).String()),
 	)
 
-	return output.Body, nil
+	return object, nil
 }
 
 // Delete deletes a file from S3
@@ -204,10 +171,7 @@ func (s *S3Storage) Delete(ctx context.Context, filename string) error {
 		log.String("component", "s3-storage"),
 	)
 
-	_, err := s.client.DeleteObject(ctx, &s3.DeleteObjectInput{
-		Bucket: aws.String(s.bucket),
-		Key:    aws.String(key),
-	})
+	err := s.client.RemoveObject(ctx, s.bucket, key, minio.RemoveObjectOptions{})
 	if err != nil {
 		s.logger.Error(traceID, "Failed to delete file from S3", nil,
 			log.Error(err),
@@ -238,55 +202,43 @@ func (s *S3Storage) List(ctx context.Context, opts ListOptions) ([]FileInfo, err
 
 	var files []FileInfo
 
-	input := &s3.ListObjectsV2Input{
-		Bucket: aws.String(s.bucket),
-	}
-
-	// Use configured prefix as base
+	// Build prefix for listing
+	prefix := ""
 	if s.prefix != "" {
-		input.Prefix = aws.String(s.prefix + "/")
+		prefix = s.prefix + "/"
 	}
-
-	// Append additional prefix if provided in opts
 	if opts.Prefix != "" {
-		prefix := opts.Prefix
-		if s.prefix != "" {
-			prefix = s.prefix + "/" + opts.Prefix
-		}
-		input.Prefix = aws.String(prefix)
+		prefix = prefix + opts.Prefix
 	}
 
-	paginator := s3.NewListObjectsV2Paginator(s.client, input)
+	// Create channel for objects
+	objectCh := s.client.ListObjects(ctx, s.bucket, minio.ListObjectsOptions{
+		Prefix:    prefix,
+		Recursive: true,
+	})
 
 	count := 0
-	for paginator.HasMorePages() {
+	for object := range objectCh {
+		if object.Err != nil {
+			s.logger.Error(traceID, "Failed to list files from S3", nil,
+				log.Error(object.Err),
+				log.String("component", "s3-storage"),
+			)
+			return nil, fmt.Errorf("unable to list files from S3: %w", object.Err)
+		}
+
 		if opts.MaxFiles > 0 && count >= opts.MaxFiles {
 			break
 		}
 
-		page, err := paginator.NextPage(ctx)
-		if err != nil {
-			s.logger.Error(traceID, "Failed to list files from S3", nil,
-				log.Error(err),
-				log.String("component", "s3-storage"),
-			)
-			return nil, fmt.Errorf("unable to list files from S3: %w", err)
-		}
-
-		for _, obj := range page.Contents {
-			if opts.MaxFiles > 0 && count >= opts.MaxFiles {
-				break
-			}
-
-			files = append(files, FileInfo{
-				Name:       filepath.Base(*obj.Key),
-				Size:       *obj.Size,
-				CreatedAt:  *obj.LastModified,
-				ModifiedAt: *obj.LastModified,
-				ID:         *obj.Key,
-			})
-			count++
-		}
+		files = append(files, FileInfo{
+			Name:       filepath.Base(object.Key),
+			Size:       object.Size,
+			CreatedAt:  object.LastModified,
+			ModifiedAt: object.LastModified,
+			ID:         object.Key,
+		})
+		count++
 	}
 
 	s.logger.Info(traceID, "S3 list completed", nil,
@@ -302,15 +254,17 @@ func (s *S3Storage) List(ctx context.Context, opts ListOptions) ([]FileInfo, err
 func (s *S3Storage) Health(ctx context.Context) error {
 	traceID := traceid.FromContext(ctx)
 
-	_, err := s.client.HeadBucket(ctx, &s3.HeadBucketInput{
-		Bucket: aws.String(s.bucket),
-	})
+	exists, err := s.client.BucketExists(ctx, s.bucket)
 	if err != nil {
 		s.logger.Error(traceID, "S3 health check failed", nil,
 			log.Error(err),
 			log.String("component", "s3-storage"),
 		)
 		return fmt.Errorf("S3 health check failed: %w", err)
+	}
+
+	if !exists {
+		return fmt.Errorf("S3 bucket %s does not exist", s.bucket)
 	}
 
 	return nil

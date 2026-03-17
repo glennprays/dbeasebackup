@@ -38,6 +38,9 @@ type Config struct {
 	// Retention
 	BACKUP_RETENTION_DAYS int `mapstructure:"BACKUP_RETENTION_DAYS" default:"30"`
 
+	// Verification
+	BACKUP_VERIFY bool `mapstructure:"BACKUP_VERIFY" default:"true"`
+
 	// Scheduler
 	CRON_SCHEDULE      string `mapstructure:"CRON_SCHEDULE" default:""`
 	SCHEDULER_TIMEZONE string `mapstructure:"SCHEDULER_TIMEZONE" default:"UTC"`

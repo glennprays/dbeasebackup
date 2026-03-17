@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"os/exec"
+	"path/filepath"
 	"runtime"
 	"strings"
 	"time"
@@ -88,6 +90,17 @@ func (s *Service) Backup(ctx context.Context) error {
 		return err
 	}
 
+	// Verify the backup (optional)
+	if s.cfg.BACKUP_VERIFY {
+		if err := s.verifyBackup(ctx, traceID, backupFile); err != nil {
+			s.logger.Warn(traceID, "Backup verification failed, but backup was uploaded successfully", nil,
+				log.Error(err),
+				log.String("component", "backup-service"),
+			)
+			// Don't fail the backup, just warn - the backup is still valid
+		}
+	}
+
 	// Delete the local backup file
 	if err := s.deleteLocalBackup(ctx, traceID, backupFile); err != nil {
 		return err
@@ -139,6 +152,49 @@ func (s *Service) uploadBackup(ctx context.Context, traceID, backupFilePath stri
 	s.logger.Info(traceID, "Backup uploaded to storage", nil,
 		log.String("filename", fileInfo.Name()),
 		log.String("component", "backup-service"),
+	)
+
+	return nil
+}
+
+// verifyBackup downloads and validates the backup integrity using pg_restore --list
+func (s *Service) verifyBackup(ctx context.Context, traceID, backupFilePath string) error {
+	startTime := time.Now()
+
+	// Extract filename from path
+	filename := filepath.Base(backupFilePath)
+
+	s.logger.Info(traceID, "Starting backup verification", nil,
+		log.String("filename", filename),
+		log.String("component", "backup-service"),
+	)
+
+	// Download the backup from storage
+	reader, err := s.storage.Download(ctx, filename)
+	if err != nil {
+		return fmt.Errorf("unable to download backup for verification: %w", err)
+	}
+	defer reader.Close()
+
+	// Run pg_restore --list to validate the backup structure
+	// This parses the archive without actually restoring data
+	cmd := exec.CommandContext(ctx, "pg_restore", "--list", "-")
+	cmd.Stdin = reader
+
+	output, err := cmd.CombinedOutput()
+	if err != nil {
+		s.logger.Error(traceID, "Backup verification failed", nil,
+			log.Error(err),
+			log.String("output", string(output)),
+			log.String("component", "backup-service"),
+		)
+		return fmt.Errorf("backup verification failed: %w", err)
+	}
+
+	s.logger.Info(traceID, "Backup verification completed", nil,
+		log.String("filename", filename),
+		log.String("component", "backup-service"),
+		log.String("duration", time.Since(startTime).String()),
 	)
 
 	return nil

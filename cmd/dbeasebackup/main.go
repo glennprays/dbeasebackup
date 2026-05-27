@@ -6,12 +6,14 @@ import (
 	"os"
 	"os/signal"
 	"syscall"
+	"time"
 
 	"github.com/glennprays/dbeasebackup/config"
 	"github.com/glennprays/dbeasebackup/internal/backup"
 	"github.com/glennprays/dbeasebackup/internal/health"
 	backupprovider "github.com/glennprays/dbeasebackup/pkg/backup"
 	"github.com/glennprays/dbeasebackup/pkg/database"
+	"github.com/glennprays/dbeasebackup/pkg/notifier"
 	"github.com/glennprays/dbeasebackup/pkg/scheduler"
 	"github.com/glennprays/dbeasebackup/pkg/storage"
 	"github.com/glennprays/log"
@@ -98,8 +100,21 @@ func main() {
 
 	logger.Info(traceID, "Storage initialized", nil)
 
+	// Initialize webhook notifier (disabled when WEBHOOK_URL is empty)
+	var webhookNotifier notifier.Notifier
+	if wn := notifier.NewWebhookNotifier(notifier.WebhookConfig{
+		URL:     cfg.WEBHOOK_URL,
+		Secret:  cfg.WEBHOOK_SECRET,
+		Timeout: cfg.GetWebhookTimeout(),
+	}, logger); wn != nil {
+		webhookNotifier = wn
+		logger.Info(traceID, "Webhook notifier initialized", nil,
+			log.String("url", cfg.WEBHOOK_URL),
+		)
+	}
+
 	// Initialize backup service
-	backupService, err := backup.NewService(db, storageProvider, backupProvider, cfg, logger)
+	backupService, err := backup.NewService(db, storageProvider, backupProvider, cfg, logger, webhookNotifier)
 	if err != nil {
 		logger.Error(traceID, "Failed to initialize backup service", nil, log.Error(err))
 		os.Exit(1)
@@ -131,15 +146,20 @@ func main() {
 		os.Exit(1)
 	}
 
-	// Add cleanup job (same schedule as backup)
+	// Add cleanup job
 	cleanupJob := backup.NewCleanupJob(backupService)
-	if err := cronScheduler.AddJob(cfg.CRON_SCHEDULE, cleanupJob); err != nil {
+	cleanupSchedule := cfg.CLEANUP_CRON_SCHEDULE
+	if cleanupSchedule == "" {
+		cleanupSchedule = cfg.CRON_SCHEDULE
+	}
+	if err := cronScheduler.AddJob(cleanupSchedule, cleanupJob); err != nil {
 		logger.Error(traceID, "Failed to add cleanup job", nil, log.Error(err))
 		os.Exit(1)
 	}
 
 	logger.Info(traceID, "Scheduler configured", nil,
-		log.String("schedule", cfg.CRON_SCHEDULE),
+		log.String("backup_schedule", cfg.CRON_SCHEDULE),
+		log.String("cleanup_schedule", cleanupSchedule),
 		log.String("timezone", cfg.SCHEDULER_TIMEZONE),
 	)
 
@@ -150,7 +170,6 @@ func main() {
 	}
 
 	logger.Info(traceID, "DBEaseBackup started successfully", nil)
-	fmt.Println("Database Auto Backup Service Started...")
 
 	// Wait for shutdown signal
 	waitForShutdown(logger, cronScheduler, healthServer)
@@ -238,19 +257,17 @@ func waitForShutdown(logger *log.Logger, sched *scheduler.CronScheduler, healthS
 	logger.Info(traceID, "Shutdown signal received", nil,
 		log.String("signal", sig.String()),
 	)
-	fmt.Printf("\nReceived %v, shutting down...\n", sig)
 
-	// Stop the health server
-	ctx := context.Background()
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+
 	if err := healthServer.Stop(ctx); err != nil {
 		logger.Error(traceID, "Error stopping health server", nil, log.Error(err))
 	}
 
-	// Stop the scheduler
 	if err := sched.Stop(ctx); err != nil {
 		logger.Error(traceID, "Error stopping scheduler", nil, log.Error(err))
 	}
 
 	logger.Info(traceID, "DBEaseBackup stopped", nil)
-	fmt.Println("Database Auto Backup Service Stopped.")
 }

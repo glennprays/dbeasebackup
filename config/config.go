@@ -30,6 +30,7 @@ type Config struct {
 	PG_USER     string `mapstructure:"PG_USER" default:""`
 	PG_PASSWORD string `mapstructure:"PG_PASSWORD" default:""`
 	PG_DATABASE string `mapstructure:"PG_DATABASE" default:""`
+	PG_SSLMODE  string `mapstructure:"PG_SSLMODE" default:"disable"`
 
 	// Storage
 	BACKUP_DIR     string `mapstructure:"BACKUP_DIR" default:"backups/postgres"`
@@ -42,8 +43,9 @@ type Config struct {
 	BACKUP_VERIFY bool `mapstructure:"BACKUP_VERIFY" default:"true"`
 
 	// Scheduler
-	CRON_SCHEDULE      string `mapstructure:"CRON_SCHEDULE" default:""`
-	SCHEDULER_TIMEZONE string `mapstructure:"SCHEDULER_TIMEZONE" default:"UTC"`
+	CRON_SCHEDULE          string `mapstructure:"CRON_SCHEDULE" default:""`
+	CLEANUP_CRON_SCHEDULE  string `mapstructure:"CLEANUP_CRON_SCHEDULE" default:""`
+	SCHEDULER_TIMEZONE     string `mapstructure:"SCHEDULER_TIMEZONE" default:"UTC"`
 
 	// Logging
 	LOG_LEVEL  string `mapstructure:"LOG_LEVEL" default:"info"`
@@ -55,6 +57,11 @@ type Config struct {
 	// Google Drive
 	GOOGLE_DRIVE_FOLDER_ID string `mapstructure:"GOOGLE_DRIVE_FOLDER_ID" default:""`
 	GOOGLE_DRIVE_KEY_FILE  string `mapstructure:"GOOGLE_DRIVE_KEY_FILE" default:"service-account-key.json"`
+
+	// Webhook Notifications
+	WEBHOOK_URL     string `mapstructure:"WEBHOOK_URL" default:""`
+	WEBHOOK_SECRET  string `mapstructure:"WEBHOOK_SECRET" default:""`
+	WEBHOOK_TIMEOUT string `mapstructure:"WEBHOOK_TIMEOUT" default:"10s"`
 
 	// S3 Storage
 	S3_BUCKET            string `mapstructure:"S3_BUCKET" default:""`
@@ -154,6 +161,12 @@ func (c *Config) Validate() error {
 		if c.PG_DATABASE == "" {
 			return fmt.Errorf("PG_DATABASE environment variable is required")
 		}
+		validSSLModes := map[string]bool{
+			"disable": true, "require": true, "verify-ca": true, "verify-full": true,
+		}
+		if !validSSLModes[c.PG_SSLMODE] {
+			return fmt.Errorf("invalid PG_SSLMODE: %s (valid: disable, require, verify-ca, verify-full)", c.PG_SSLMODE)
+		}
 	}
 
 	if c.CRON_SCHEDULE == "" {
@@ -216,7 +229,16 @@ func (c *Config) IsDevelopment() bool {
 func (c *Config) GetBackupTimeout() time.Duration {
 	d, err := time.ParseDuration(c.BACKUP_TIMEOUT)
 	if err != nil {
-		return 30 * time.Minute // fallback to default
+		return 30 * time.Minute
+	}
+	return d
+}
+
+// GetWebhookTimeout parses the WEBHOOK_TIMEOUT string into a time.Duration
+func (c *Config) GetWebhookTimeout() time.Duration {
+	d, err := time.ParseDuration(c.WEBHOOK_TIMEOUT)
+	if err != nil {
+		return 10 * time.Second
 	}
 	return d
 }

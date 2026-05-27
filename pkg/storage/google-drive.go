@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"strings"
 	"time"
 
 	"github.com/glennprays/dbeasebackup/pkg/traceid"
@@ -113,7 +114,7 @@ func (g *GoogleDriveStorage) Download(ctx context.Context, filename string) (io.
 	}
 
 	// Search for the file by name
-	query := fmt.Sprintf("name='%s' and trashed=false", filename)
+	query := fmt.Sprintf("name='%s' and trashed=false", escapeDriveQuery(filename))
 	files, err := g.service.Files.List().Q(query).Context(ctx).Do()
 	if err != nil {
 		g.logger.Error(traceID, "Failed to search for file", nil,
@@ -125,7 +126,15 @@ func (g *GoogleDriveStorage) Download(ctx context.Context, filename string) (io.
 	}
 
 	if len(files.Files) == 0 {
-		return nil, fmt.Errorf("file not found: %s", filename)
+		return nil, fmt.Errorf("%w: %s", ErrNotFound, filename)
+	}
+
+	if len(files.Files) > 1 {
+		g.logger.Warn(traceID, "Multiple files found with same name, using first match", nil,
+			log.String("filename", filename),
+			log.Int("count", len(files.Files)),
+			log.String("component", "google-drive-storage"),
+		)
 	}
 
 	fileID := files.Files[0].Id
@@ -164,7 +173,7 @@ func (g *GoogleDriveStorage) Delete(ctx context.Context, filename string) error 
 	}
 
 	// Search for the file by name
-	query := fmt.Sprintf("name='%s' and trashed=false", filename)
+	query := fmt.Sprintf("name='%s' and trashed=false", escapeDriveQuery(filename))
 	files, err := g.service.Files.List().Q(query).Context(ctx).Do()
 	if err != nil {
 		g.logger.Error(traceID, "Failed to search for file to delete", nil,
@@ -176,7 +185,15 @@ func (g *GoogleDriveStorage) Delete(ctx context.Context, filename string) error 
 	}
 
 	if len(files.Files) == 0 {
-		return fmt.Errorf("file not found: %s", filename)
+		return fmt.Errorf("%w: %s", ErrNotFound, filename)
+	}
+
+	if len(files.Files) > 1 {
+		g.logger.Warn(traceID, "Multiple files found with same name during delete, using first match", nil,
+			log.String("filename", filename),
+			log.Int("count", len(files.Files)),
+			log.String("component", "google-drive-storage"),
+		)
 	}
 
 	fileID := files.Files[0].Id
@@ -216,10 +233,10 @@ func (g *GoogleDriveStorage) List(ctx context.Context, opts ListOptions) ([]File
 
 	query := "trashed=false"
 	if opts.FolderID != "" {
-		query = fmt.Sprintf("'%s' in parents and trashed=false", opts.FolderID)
+		query = fmt.Sprintf("'%s' in parents and trashed=false", escapeDriveQuery(opts.FolderID))
 	}
 	if opts.Prefix != "" {
-		query = fmt.Sprintf("%s and name contains '%s'", query, opts.Prefix)
+		query = fmt.Sprintf("%s and name contains '%s'", query, escapeDriveQuery(opts.Prefix))
 	}
 
 	req := g.service.Files.List().Q(query).Context(ctx)
@@ -273,6 +290,12 @@ func (g *GoogleDriveStorage) Health(ctx context.Context) error {
 	}
 
 	return nil
+}
+
+func escapeDriveQuery(s string) string {
+	s = strings.ReplaceAll(s, `\`, `\\`)
+	s = strings.ReplaceAll(s, `'`, `\'`)
+	return s
 }
 
 // parseTime parses a time string in RFC3339 format

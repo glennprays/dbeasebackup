@@ -68,11 +68,20 @@ func (s *CronScheduler) AddJob(cronExpr string, job Job) error {
 	traceID := "scheduler-add-job"
 
 	entryID, err := s.cron.AddFunc(cronExpr, func() {
-		// Generate trace_id ONCE at job start
 		jobTraceID := traceid.Generate()
 		startTime := time.Now()
 
-		// Create context with trace_id
+		defer func() {
+			if r := recover(); r != nil {
+				s.logger.Error(jobTraceID, "Job panicked", nil,
+					log.Any("panic", r),
+					log.String("job", job.Name()),
+					log.String("component", "scheduler"),
+					log.String("duration", time.Since(startTime).String()),
+				)
+			}
+		}()
+
 		ctx := traceid.NewContext(context.Background(), jobTraceID)
 
 		s.logger.Info(jobTraceID, "Starting scheduled job", nil,
@@ -140,8 +149,15 @@ func (s *CronScheduler) Stop(ctx context.Context) error {
 		return nil
 	}
 
-	ctx = s.cron.Stop()
-	<-ctx.Done()
+	cronCtx := s.cron.Stop()
+
+	select {
+	case <-cronCtx.Done():
+		// Cron finished all running jobs
+	case <-ctx.Done():
+		s.logger.Warn(traceID, "Scheduler stop timed out, forcing shutdown", nil)
+		return ctx.Err()
+	}
 
 	s.running = false
 

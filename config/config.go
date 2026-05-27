@@ -58,6 +58,11 @@ type Config struct {
 	GOOGLE_DRIVE_FOLDER_ID string `mapstructure:"GOOGLE_DRIVE_FOLDER_ID" default:""`
 	GOOGLE_DRIVE_KEY_FILE  string `mapstructure:"GOOGLE_DRIVE_KEY_FILE" default:"service-account-key.json"`
 
+	// Webhook Notifications
+	WEBHOOK_URL     string `mapstructure:"WEBHOOK_URL" default:""`
+	WEBHOOK_SECRET  string `mapstructure:"WEBHOOK_SECRET" default:""`
+	WEBHOOK_TIMEOUT string `mapstructure:"WEBHOOK_TIMEOUT" default:"10s"`
+
 	// S3 Storage
 	S3_BUCKET            string `mapstructure:"S3_BUCKET" default:""`
 	S3_REGION            string `mapstructure:"S3_REGION" default:"us-east-1"`
@@ -224,7 +229,16 @@ func (c *Config) IsDevelopment() bool {
 func (c *Config) GetBackupTimeout() time.Duration {
 	d, err := time.ParseDuration(c.BACKUP_TIMEOUT)
 	if err != nil {
-		return 30 * time.Minute // fallback to default
+		return 30 * time.Minute
+	}
+	return d
+}
+
+// GetWebhookTimeout parses the WEBHOOK_TIMEOUT string into a time.Duration
+func (c *Config) GetWebhookTimeout() time.Duration {
+	d, err := time.ParseDuration(c.WEBHOOK_TIMEOUT)
+	if err != nil {
+		return 10 * time.Second
 	}
 	return d
 }

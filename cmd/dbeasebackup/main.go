@@ -13,6 +13,7 @@ import (
 	"github.com/glennprays/dbeasebackup/internal/health"
 	backupprovider "github.com/glennprays/dbeasebackup/pkg/backup"
 	"github.com/glennprays/dbeasebackup/pkg/database"
+	"github.com/glennprays/dbeasebackup/pkg/notifier"
 	"github.com/glennprays/dbeasebackup/pkg/scheduler"
 	"github.com/glennprays/dbeasebackup/pkg/storage"
 	"github.com/glennprays/log"
@@ -99,8 +100,21 @@ func main() {
 
 	logger.Info(traceID, "Storage initialized", nil)
 
+	// Initialize webhook notifier (disabled when WEBHOOK_URL is empty)
+	var webhookNotifier notifier.Notifier
+	if wn := notifier.NewWebhookNotifier(notifier.WebhookConfig{
+		URL:     cfg.WEBHOOK_URL,
+		Secret:  cfg.WEBHOOK_SECRET,
+		Timeout: cfg.GetWebhookTimeout(),
+	}, logger); wn != nil {
+		webhookNotifier = wn
+		logger.Info(traceID, "Webhook notifier initialized", nil,
+			log.String("url", cfg.WEBHOOK_URL),
+		)
+	}
+
 	// Initialize backup service
-	backupService, err := backup.NewService(db, storageProvider, backupProvider, cfg, logger)
+	backupService, err := backup.NewService(db, storageProvider, backupProvider, cfg, logger, webhookNotifier)
 	if err != nil {
 		logger.Error(traceID, "Failed to initialize backup service", nil, log.Error(err))
 		os.Exit(1)

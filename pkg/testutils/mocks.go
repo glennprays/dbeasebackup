@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"io"
 
+	"github.com/glennprays/dbeasebackup/pkg/notifier"
 	"github.com/glennprays/dbeasebackup/pkg/storage"
 )
 
@@ -168,4 +169,19 @@ func (m *MockJob) Execute(ctx context.Context) error {
 		return m.ExecuteFunc(ctx)
 	}
 	return nil
+}
+
+// MockNotifier implements notifier.Notifier interface
+type MockNotifier struct {
+	NotifyFunc  func(ctx context.Context, event notifier.Event)
+	NotifyCount int
+	LastEvent   notifier.Event
+}
+
+func (m *MockNotifier) Notify(ctx context.Context, event notifier.Event) {
+	m.NotifyCount++
+	m.LastEvent = event
+	if m.NotifyFunc != nil {
+		m.NotifyFunc(ctx, event)
+	}
 }

@@ -66,7 +66,7 @@ func TestNewService_Success(t *testing.T) {
 		BACKUP_DIR:             t.TempDir(),
 		GOOGLE_DRIVE_FOLDER_ID: "test-folder-id",
 	}
-	service, err := NewService(mockDB, mockStorage, mockProvider, cfg, logger)
+	service, err := NewService(mockDB, mockStorage, mockProvider, cfg, logger, nil)
 	if err != nil {
 		t.Errorf("NewService() unexpected error = %v", err)
 	}
@@ -88,7 +88,7 @@ func TestNewService_EnsureBackupTableError(t *testing.T) {
 	cfg := &config.Config{
 		BACKUP_DIR: t.TempDir(),
 	}
-	service, err := NewService(mockDB, mockStorage, mockProvider, cfg, logger)
+	service, err := NewService(mockDB, mockStorage, mockProvider, cfg, logger, nil)
 	if err == nil {
 		t.Error("NewService() expected error when EnsureBackupTable fails")
 	}
@@ -110,7 +110,7 @@ func TestService_Name(t *testing.T) {
 	cfg := &config.Config{
 		BACKUP_DIR: t.TempDir(),
 	}
-	service, err := NewService(mockDB, mockStorage, mockProvider, cfg, logger)
+	service, err := NewService(mockDB, mockStorage, mockProvider, cfg, logger, nil)
 	if err != nil {
 		t.Fatalf("NewService() error = %v", err)
 	}
@@ -146,7 +146,7 @@ func TestService_Backup_Success(t *testing.T) {
 		BACKUP_DIR:             backupDir,
 		GOOGLE_DRIVE_FOLDER_ID: "test-folder-id",
 	}
-	service, err := NewService(mockDB, mockStorage, mockProvider, cfg, logger)
+	service, err := NewService(mockDB, mockStorage, mockProvider, cfg, logger, nil)
 	if err != nil {
 		t.Fatalf("NewService() error = %v", err)
 	}
@@ -176,7 +176,7 @@ func TestService_Backup_DumpError(t *testing.T) {
 	cfg := &config.Config{
 		BACKUP_DIR: t.TempDir(),
 	}
-	service, err := NewService(mockDB, mockStorage, mockProvider, cfg, logger)
+	service, err := NewService(mockDB, mockStorage, mockProvider, cfg, logger, nil)
 	if err != nil {
 		t.Fatalf("NewService() error = %v", err)
 	}
@@ -207,7 +207,7 @@ func TestService_Backup_RecordError(t *testing.T) {
 		BACKUP_DIR: backupDir,
 	}
 	// NewService will fail because EnsureBackupTable uses the same ExecFunc
-	service, err := NewService(mockDB, mockStorage, mockProvider, cfg, logger)
+	service, err := NewService(mockDB, mockStorage, mockProvider, cfg, logger, nil)
 	if err == nil {
 		t.Error("NewService() expected error when record fails")
 	}
@@ -243,7 +243,7 @@ func TestService_Backup_UploadError(t *testing.T) {
 		BACKUP_DIR:             backupDir,
 		GOOGLE_DRIVE_FOLDER_ID: "test-folder-id",
 	}
-	service, err := NewService(mockDB, mockStorage, mockProvider, cfg, logger)
+	service, err := NewService(mockDB, mockStorage, mockProvider, cfg, logger, nil)
 	if err != nil {
 		t.Fatalf("NewService() error = %v", err)
 	}
@@ -280,7 +280,7 @@ func TestService_Backup_CleanupError(t *testing.T) {
 		BACKUP_DIR:             backupDir,
 		GOOGLE_DRIVE_FOLDER_ID: "test-folder-id",
 	}
-	service, err := NewService(mockDB, mockStorage, mockProvider, cfg, logger)
+	service, err := NewService(mockDB, mockStorage, mockProvider, cfg, logger, nil)
 	if err != nil {
 		t.Fatalf("NewService() error = %v", err)
 	}
@@ -310,7 +310,7 @@ func TestService_Health_Success(t *testing.T) {
 	cfg := &config.Config{
 		BACKUP_DIR: t.TempDir(),
 	}
-	service, err := NewService(mockDB, mockStorage, mockProvider, cfg, logger)
+	service, err := NewService(mockDB, mockStorage, mockProvider, cfg, logger, nil)
 	if err != nil {
 		t.Fatalf("NewService() error = %v", err)
 	}
@@ -340,7 +340,7 @@ func TestService_Health_DatabaseError(t *testing.T) {
 	cfg := &config.Config{
 		BACKUP_DIR: t.TempDir(),
 	}
-	service, err := NewService(mockDB, mockStorage, mockProvider, cfg, logger)
+	service, err := NewService(mockDB, mockStorage, mockProvider, cfg, logger, nil)
 	if err != nil {
 		t.Fatalf("NewService() error = %v", err)
 	}
@@ -370,7 +370,7 @@ func TestService_Health_StorageError(t *testing.T) {
 	cfg := &config.Config{
 		BACKUP_DIR: t.TempDir(),
 	}
-	service, err := NewService(mockDB, mockStorage, mockProvider, cfg, logger)
+	service, err := NewService(mockDB, mockStorage, mockProvider, cfg, logger, nil)
 	if err != nil {
 		t.Fatalf("NewService() error = %v", err)
 	}
@@ -404,7 +404,7 @@ func TestService_ListBackups_Success(t *testing.T) {
 	cfg := &config.Config{
 		BACKUP_DIR: t.TempDir(),
 	}
-	service, err := NewService(mockDB, mockStorage, mockProvider, cfg, logger)
+	service, err := NewService(mockDB, mockStorage, mockProvider, cfg, logger, nil)
 	if err != nil {
 		t.Fatalf("NewService() error = %v", err)
 	}
@@ -430,7 +430,7 @@ func TestService_ListBackups_QueryError(t *testing.T) {
 	cfg := &config.Config{
 		BACKUP_DIR: t.TempDir(),
 	}
-	service, err := NewService(mockDB, mockStorage, mockProvider, cfg, logger)
+	service, err := NewService(mockDB, mockStorage, mockProvider, cfg, logger, nil)
 	if err != nil {
 		t.Fatalf("NewService() error = %v", err)
 	}
@@ -467,7 +467,7 @@ func TestService_Execute(t *testing.T) {
 		BACKUP_DIR:             backupDir,
 		GOOGLE_DRIVE_FOLDER_ID: "test-folder-id",
 	}
-	service, err := NewService(mockDB, mockStorage, mockProvider, cfg, logger)
+	service, err := NewService(mockDB, mockStorage, mockProvider, cfg, logger, nil)
 	if err != nil {
 		t.Fatalf("NewService() error = %v", err)
 	}
@@ -491,7 +491,7 @@ func TestService_EnsureBackupTable_Success(t *testing.T) {
 	cfg := &config.Config{
 		BACKUP_DIR: t.TempDir(),
 	}
-	service, err := NewService(mockDB, mockStorage, mockProvider, cfg, logger)
+	service, err := NewService(mockDB, mockStorage, mockProvider, cfg, logger, nil)
 	if err != nil {
 		t.Fatalf("NewService() error = %v", err)
 	}
@@ -519,7 +519,7 @@ func TestService_EnsureBackupTable_Error(t *testing.T) {
 	cfg := &config.Config{
 		BACKUP_DIR: t.TempDir(),
 	}
-	service, err := NewService(mockDB, mockStorage, mockProvider, cfg, logger)
+	service, err := NewService(mockDB, mockStorage, mockProvider, cfg, logger, nil)
 	if err != nil {
 		t.Fatalf("NewService() error = %v", err)
 	}
@@ -557,7 +557,7 @@ func TestService_Backup_OpenFileError(t *testing.T) {
 		BACKUP_DIR:             t.TempDir(),
 		GOOGLE_DRIVE_FOLDER_ID: "test-folder-id",
 	}
-	service, err := NewService(mockDB, mockStorage, mockProvider, cfg, logger)
+	service, err := NewService(mockDB, mockStorage, mockProvider, cfg, logger, nil)
 	if err != nil {
 		t.Fatalf("NewService() error = %v", err)
 	}
@@ -605,7 +605,7 @@ func TestService_Backup_RecordThenUploadOrder(t *testing.T) {
 		BACKUP_DIR:             backupDir,
 		GOOGLE_DRIVE_FOLDER_ID: "test-folder-id",
 	}
-	service, err := NewService(mockDB, mockStorage, mockProvider, cfg, logger)
+	service, err := NewService(mockDB, mockStorage, mockProvider, cfg, logger, nil)
 	if err != nil {
 		t.Fatalf("NewService() error = %v", err)
 	}
@@ -645,7 +645,7 @@ func TestService_Cleanup_Disabled(t *testing.T) {
 		BACKUP_DIR:             t.TempDir(),
 		BACKUP_RETENTION_DAYS:  0, // Disabled
 	}
-	service, err := NewService(mockDB, mockStorage, mockProvider, cfg, logger)
+	service, err := NewService(mockDB, mockStorage, mockProvider, cfg, logger, nil)
 	if err != nil {
 		t.Fatalf("NewService() error = %v", err)
 	}
@@ -674,7 +674,7 @@ func TestService_Cleanup_NoOldBackups(t *testing.T) {
 		BACKUP_DIR:             t.TempDir(),
 		BACKUP_RETENTION_DAYS:  30,
 	}
-	service, err := NewService(mockDB, mockStorage, mockProvider, cfg, logger)
+	service, err := NewService(mockDB, mockStorage, mockProvider, cfg, logger, nil)
 	if err != nil {
 		t.Fatalf("NewService() error = %v", err)
 	}
@@ -699,7 +699,7 @@ func TestCleanupJob_Name(t *testing.T) {
 		BACKUP_DIR:            t.TempDir(),
 		BACKUP_RETENTION_DAYS: 30,
 	}
-	service, err := NewService(mockDB, mockStorage, mockProvider, cfg, logger)
+	service, err := NewService(mockDB, mockStorage, mockProvider, cfg, logger, nil)
 	if err != nil {
 		t.Fatalf("NewService() error = %v", err)
 	}
@@ -725,7 +725,7 @@ func TestCleanupJob_Execute(t *testing.T) {
 		BACKUP_DIR:            t.TempDir(),
 		BACKUP_RETENTION_DAYS: 0, // Disabled to make Execute return nil
 	}
-	service, err := NewService(mockDB, mockStorage, mockProvider, cfg, logger)
+	service, err := NewService(mockDB, mockStorage, mockProvider, cfg, logger, nil)
 	if err != nil {
 		t.Fatalf("NewService() error = %v", err)
 	}
@@ -752,7 +752,7 @@ func TestNewCleanupJob(t *testing.T) {
 		BACKUP_DIR:            t.TempDir(),
 		BACKUP_RETENTION_DAYS: 30,
 	}
-	service, err := NewService(mockDB, mockStorage, mockProvider, cfg, logger)
+	service, err := NewService(mockDB, mockStorage, mockProvider, cfg, logger, nil)
 	if err != nil {
 		t.Fatalf("NewService() error = %v", err)
 	}
@@ -777,7 +777,7 @@ func TestService_DeleteBackupRecord(t *testing.T) {
 	cfg := &config.Config{
 		BACKUP_DIR: t.TempDir(),
 	}
-	service, err := NewService(mockDB, mockStorage, mockProvider, cfg, logger)
+	service, err := NewService(mockDB, mockStorage, mockProvider, cfg, logger, nil)
 	if err != nil {
 		t.Fatalf("NewService() error = %v", err)
 	}
@@ -807,7 +807,7 @@ func TestService_DeleteBackupRecord_Error(t *testing.T) {
 	cfg := &config.Config{
 		BACKUP_DIR: t.TempDir(),
 	}
-	service, err := NewService(mockDB, mockStorage, mockProvider, cfg, logger)
+	service, err := NewService(mockDB, mockStorage, mockProvider, cfg, logger, nil)
 	if err != nil {
 		t.Fatalf("NewService() error = %v", err)
 	}
@@ -841,7 +841,7 @@ func TestService_DeleteBackup_FileNotFoundInStorage(t *testing.T) {
 	cfg := &config.Config{
 		BACKUP_DIR: t.TempDir(),
 	}
-	service, err := NewService(mockDB, mockStorage, mockProvider, cfg, logger)
+	service, err := NewService(mockDB, mockStorage, mockProvider, cfg, logger, nil)
 	if err != nil {
 		t.Fatalf("NewService() error = %v", err)
 	}

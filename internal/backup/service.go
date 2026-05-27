@@ -13,6 +13,7 @@ import (
 	"github.com/glennprays/dbeasebackup/config"
 	backupprovider "github.com/glennprays/dbeasebackup/pkg/backup"
 	"github.com/glennprays/dbeasebackup/pkg/database"
+	"github.com/glennprays/dbeasebackup/pkg/notifier"
 	"github.com/glennprays/dbeasebackup/pkg/storage"
 	"github.com/glennprays/dbeasebackup/pkg/traceid"
 	"github.com/glennprays/log"
@@ -25,10 +26,11 @@ type Service struct {
 	provider backupprovider.Provider
 	cfg      *config.Config
 	logger   *log.Logger
+	notifier notifier.Notifier
 }
 
 // NewService creates a new backup service
-func NewService(db database.Database, storage storage.Storage, provider backupprovider.Provider, cfg *config.Config, logger *log.Logger) (*Service, error) {
+func NewService(db database.Database, storage storage.Storage, provider backupprovider.Provider, cfg *config.Config, logger *log.Logger, n notifier.Notifier) (*Service, error) {
 	traceID := "backup-service-init"
 
 	s := &Service{
@@ -37,6 +39,7 @@ func NewService(db database.Database, storage storage.Storage, provider backuppr
 		provider: provider,
 		cfg:      cfg,
 		logger:   logger,
+		notifier: n,
 	}
 
 	// Ensure the backup table exists
@@ -51,6 +54,13 @@ func NewService(db database.Database, storage storage.Storage, provider backuppr
 	return s, nil
 }
 
+func (s *Service) notify(ctx context.Context, event notifier.Event) {
+	if s.notifier == nil {
+		return
+	}
+	s.notifier.Notify(ctx, event)
+}
+
 // Name returns the name of the job (implements scheduler.Job interface)
 func (s *Service) Name() string {
 	return s.provider.Name()
@@ -62,19 +72,47 @@ func (s *Service) Execute(ctx context.Context) error {
 }
 
 // Backup performs the complete backup workflow
-func (s *Service) Backup(ctx context.Context) error {
+func (s *Service) Backup(ctx context.Context) (retErr error) {
 	traceID := traceid.FromContext(ctx)
 	startTime := time.Now()
+	var backupFilename string
+	var backupFileSize int64
+
+	defer func() {
+		status := notifier.StatusSuccess
+		errMsg := ""
+		if retErr != nil {
+			status = notifier.StatusFailure
+			errMsg = retErr.Error()
+		}
+		s.notify(ctx, notifier.Event{
+			EventType:   notifier.EventBackup,
+			Status:      status,
+			Filename:    backupFilename,
+			FileSize:    backupFileSize,
+			Duration:    time.Since(startTime).String(),
+			Provider:    s.provider.Name(),
+			StorageType: s.cfg.STORAGE_TYPE,
+			Timestamp:   time.Now(),
+			TraceID:     traceID,
+			Error:       errMsg,
+		})
+	}()
 
 	s.logger.Info(traceID, "Starting backup workflow", nil,
 		log.String("component", "backup-service"),
 		log.String("provider", s.provider.Name()),
 	)
 
-	// Create the backup dump using provider
 	backupFile, err := s.provider.Dump(ctx, s.cfg.BACKUP_DIR)
 	if err != nil {
 		return err
+	}
+
+	// Capture file metadata for notification
+	backupFilename = filepath.Base(backupFile)
+	if info, statErr := os.Stat(backupFile); statErr == nil {
+		backupFileSize = info.Size()
 	}
 
 	// Ensure local file is cleaned up on any failure after dump
@@ -93,17 +131,14 @@ func (s *Service) Backup(ctx context.Context) error {
 
 	backupTime := time.Now()
 
-	// Record the backup in the database
 	if err := s.recordBackup(ctx, traceID, backupFile, backupTime); err != nil {
 		return err
 	}
 
-	// Upload the backup to storage
 	if err := s.uploadBackup(ctx, traceID, backupFile); err != nil {
 		return err
 	}
 
-	// Verify the backup (optional)
 	if s.cfg.BACKUP_VERIFY {
 		if err := s.verifyBackup(ctx, traceID, backupFile); err != nil {
 			s.logger.Warn(traceID, "Backup verification failed, but backup was uploaded successfully", nil,
@@ -113,7 +148,6 @@ func (s *Service) Backup(ctx context.Context) error {
 		}
 	}
 
-	// Delete the local backup file
 	if err := s.deleteLocalBackup(ctx, traceID, backupFile); err != nil {
 		return err
 	}

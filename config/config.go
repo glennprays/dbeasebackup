@@ -30,6 +30,7 @@ type Config struct {
 	PG_USER     string `mapstructure:"PG_USER" default:""`
 	PG_PASSWORD string `mapstructure:"PG_PASSWORD" default:""`
 	PG_DATABASE string `mapstructure:"PG_DATABASE" default:""`
+	PG_SSLMODE  string `mapstructure:"PG_SSLMODE" default:"disable"`
 
 	// Storage
 	BACKUP_DIR     string `mapstructure:"BACKUP_DIR" default:"backups/postgres"`
@@ -42,8 +43,9 @@ type Config struct {
 	BACKUP_VERIFY bool `mapstructure:"BACKUP_VERIFY" default:"true"`
 
 	// Scheduler
-	CRON_SCHEDULE      string `mapstructure:"CRON_SCHEDULE" default:""`
-	SCHEDULER_TIMEZONE string `mapstructure:"SCHEDULER_TIMEZONE" default:"UTC"`
+	CRON_SCHEDULE          string `mapstructure:"CRON_SCHEDULE" default:""`
+	CLEANUP_CRON_SCHEDULE  string `mapstructure:"CLEANUP_CRON_SCHEDULE" default:""`
+	SCHEDULER_TIMEZONE     string `mapstructure:"SCHEDULER_TIMEZONE" default:"UTC"`
 
 	// Logging
 	LOG_LEVEL  string `mapstructure:"LOG_LEVEL" default:"info"`
@@ -153,6 +155,12 @@ func (c *Config) Validate() error {
 		}
 		if c.PG_DATABASE == "" {
 			return fmt.Errorf("PG_DATABASE environment variable is required")
+		}
+		validSSLModes := map[string]bool{
+			"disable": true, "require": true, "verify-ca": true, "verify-full": true,
+		}
+		if !validSSLModes[c.PG_SSLMODE] {
+			return fmt.Errorf("invalid PG_SSLMODE: %s (valid: disable, require, verify-ca, verify-full)", c.PG_SSLMODE)
 		}
 	}
 

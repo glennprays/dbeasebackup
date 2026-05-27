@@ -6,6 +6,7 @@ import (
 	"os"
 	"os/signal"
 	"syscall"
+	"time"
 
 	"github.com/glennprays/dbeasebackup/config"
 	"github.com/glennprays/dbeasebackup/internal/backup"
@@ -131,15 +132,20 @@ func main() {
 		os.Exit(1)
 	}
 
-	// Add cleanup job (same schedule as backup)
+	// Add cleanup job
 	cleanupJob := backup.NewCleanupJob(backupService)
-	if err := cronScheduler.AddJob(cfg.CRON_SCHEDULE, cleanupJob); err != nil {
+	cleanupSchedule := cfg.CLEANUP_CRON_SCHEDULE
+	if cleanupSchedule == "" {
+		cleanupSchedule = cfg.CRON_SCHEDULE
+	}
+	if err := cronScheduler.AddJob(cleanupSchedule, cleanupJob); err != nil {
 		logger.Error(traceID, "Failed to add cleanup job", nil, log.Error(err))
 		os.Exit(1)
 	}
 
 	logger.Info(traceID, "Scheduler configured", nil,
-		log.String("schedule", cfg.CRON_SCHEDULE),
+		log.String("backup_schedule", cfg.CRON_SCHEDULE),
+		log.String("cleanup_schedule", cleanupSchedule),
 		log.String("timezone", cfg.SCHEDULER_TIMEZONE),
 	)
 
@@ -150,7 +156,6 @@ func main() {
 	}
 
 	logger.Info(traceID, "DBEaseBackup started successfully", nil)
-	fmt.Println("Database Auto Backup Service Started...")
 
 	// Wait for shutdown signal
 	waitForShutdown(logger, cronScheduler, healthServer)
@@ -238,19 +243,17 @@ func waitForShutdown(logger *log.Logger, sched *scheduler.CronScheduler, healthS
 	logger.Info(traceID, "Shutdown signal received", nil,
 		log.String("signal", sig.String()),
 	)
-	fmt.Printf("\nReceived %v, shutting down...\n", sig)
 
-	// Stop the health server
-	ctx := context.Background()
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+
 	if err := healthServer.Stop(ctx); err != nil {
 		logger.Error(traceID, "Error stopping health server", nil, log.Error(err))
 	}
 
-	// Stop the scheduler
 	if err := sched.Stop(ctx); err != nil {
 		logger.Error(traceID, "Error stopping scheduler", nil, log.Error(err))
 	}
 
 	logger.Info(traceID, "DBEaseBackup stopped", nil)
-	fmt.Println("Database Auto Backup Service Stopped.")
 }

@@ -832,7 +832,7 @@ func TestService_DeleteBackup_FileNotFoundInStorage(t *testing.T) {
 	mockStorage := &testutils.MockStorage{
 		DeleteFunc: func(ctx context.Context, filename string) error {
 			deleteCalled = true
-			return fmt.Errorf("file not found: %s", filename)
+			return fmt.Errorf("%w: %s", storage.ErrNotFound, filename)
 		},
 	}
 	mockProvider := &testutils.MockProvider{

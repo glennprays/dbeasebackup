@@ -2,9 +2,12 @@ package storage
 
 import (
 	"context"
+	"errors"
 	"io"
 	"time"
 )
+
+var ErrNotFound = errors.New("file not found")
 
 // UploadOptions contains options for file upload
 type UploadOptions struct {

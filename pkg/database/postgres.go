@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
+	"time"
 
 	"github.com/glennprays/dbeasebackup/config"
 	"github.com/glennprays/log"
@@ -30,8 +31,8 @@ func (p *PostgresDatabase) Connect(ctx context.Context) error {
 	traceID := "db-connect"
 
 	connStr := fmt.Sprintf(
-		"host=%s port=%s user=%s password=%s dbname=%s sslmode=disable",
-		p.cfg.PG_HOST, p.cfg.PG_PORT, p.cfg.PG_USER, p.cfg.PG_PASSWORD, p.cfg.PG_DATABASE,
+		"host=%s port=%s user=%s password=%s dbname=%s sslmode=%s",
+		p.cfg.PG_HOST, p.cfg.PG_PORT, p.cfg.PG_USER, p.cfg.PG_PASSWORD, p.cfg.PG_DATABASE, p.cfg.PG_SSLMODE,
 	)
 
 	db, err := sql.Open("postgres", connStr)
@@ -39,6 +40,10 @@ func (p *PostgresDatabase) Connect(ctx context.Context) error {
 		p.logger.Error(traceID, "Failed to open database connection", nil, log.Error(err))
 		return fmt.Errorf("unable to connect to database: %w", err)
 	}
+
+	db.SetMaxOpenConns(10)
+	db.SetMaxIdleConns(5)
+	db.SetConnMaxLifetime(5 * time.Minute)
 
 	if err := db.PingContext(ctx); err != nil {
 		p.logger.Error(traceID, "Failed to ping database", nil, log.Error(err))

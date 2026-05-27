@@ -30,11 +30,18 @@ FROM alpine:3.20
 # ca-certificates is needed for TLS connections to Google Drive/S3
 RUN apk --no-cache add postgresql-client ca-certificates
 
+# Create non-root user
+RUN addgroup -S appgroup && adduser -S appuser -G appgroup
+
 # Copy the compiled Go binary from the build stage
 COPY --from=builder /app/dbeasebackup /dbeasebackup
+RUN chown appuser:appgroup /dbeasebackup
 
 # Set the working directory
 WORKDIR /
+
+# Switch to non-root user
+USER appuser
 
 # Set the environment variable to production
 ENV ENV=production

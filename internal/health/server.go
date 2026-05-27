@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"net/http"
 	"sync"
+	"time"
 
 	"github.com/glennprays/dbeasebackup/internal/backup"
 	"github.com/glennprays/log"
@@ -36,8 +37,12 @@ func (s *Server) Start(port int) error {
 	mux.HandleFunc("/livez", s.handleLivez)
 
 	s.server = &http.Server{
-		Addr:    fmt.Sprintf(":%d", port),
-		Handler:  mux,
+		Addr:              fmt.Sprintf(":%d", port),
+		Handler:           mux,
+		ReadTimeout:       5 * time.Second,
+		WriteTimeout:      10 * time.Second,
+		IdleTimeout:       120 * time.Second,
+		ReadHeaderTimeout: 3 * time.Second,
 	}
 
 	s.setReady(true)

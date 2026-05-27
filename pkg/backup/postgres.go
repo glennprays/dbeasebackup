@@ -74,7 +74,7 @@ func (p *PostgresProvider) Dump(ctx context.Context, backupDir string) (string, 
 	backupFilePath := fmt.Sprintf("%s/%s", backupDir, backupFile)
 
 	// Ensure backup directory exists
-	if err := os.MkdirAll(backupDir, os.ModePerm); err != nil {
+	if err := os.MkdirAll(backupDir, 0750); err != nil {
 		p.logger.Error(traceID, "Failed to create backup directory", nil,
 			log.Error(err),
 			log.String("directory", backupDir),
@@ -83,8 +83,7 @@ func (p *PostgresProvider) Dump(ctx context.Context, backupDir string) (string, 
 		return "", fmt.Errorf("unable to create backup directory: %w", err)
 	}
 
-	// Use exec.Command instead of exec.CommandContext to avoid hanging issues with pg_dump
-	cmd := exec.Command("pg_dump",
+	cmd := exec.CommandContext(ctx, "pg_dump",
 		"-h", p.cfg.Host,
 		"-p", p.cfg.Port,
 		"-U", p.cfg.User,
@@ -94,7 +93,6 @@ func (p *PostgresProvider) Dump(ctx context.Context, backupDir string) (string, 
 	)
 	cmd.Env = append(os.Environ(), fmt.Sprintf("PGPASSWORD=%s", p.cfg.Password))
 
-	// Capture stderr to get actual error messages from pg_dump
 	var stderr bytes.Buffer
 	cmd.Stderr = &stderr
 
@@ -103,18 +101,16 @@ func (p *PostgresProvider) Dump(ctx context.Context, backupDir string) (string, 
 		log.String("command", cmd.String()),
 	)
 
-	// Execute the dump
 	err := cmd.Run()
 
-	// Check for context cancellation
-	select {
-	case <-ctx.Done():
+	if ctx.Err() != nil {
+		// Context was cancelled or timed out — clean up partial file
+		os.Remove(backupFilePath)
 		p.logger.Error(traceID, "Backup context cancelled", nil,
 			log.String("component", "postgres-provider"),
 			log.String("ctx_error", ctx.Err().Error()),
 		)
 		return "", fmt.Errorf("backup cancelled: %w", ctx.Err())
-	default:
 	}
 
 	if err != nil {

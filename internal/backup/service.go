@@ -2,13 +2,12 @@ package backup
 
 import (
 	"context"
+	"errors"
 	"fmt"
-	"io"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"runtime"
-	"strings"
 	"time"
 
 	"github.com/glennprays/dbeasebackup/config"
@@ -78,6 +77,20 @@ func (s *Service) Backup(ctx context.Context) error {
 		return err
 	}
 
+	// Ensure local file is cleaned up on any failure after dump
+	cleanedUp := false
+	defer func() {
+		if !cleanedUp {
+			if removeErr := s.provider.Cleanup(ctx, backupFile); removeErr != nil {
+				s.logger.Error(traceID, "Failed to clean up local backup after failure", nil,
+					log.Error(removeErr),
+					log.String("path", backupFile),
+					log.String("component", "backup-service"),
+				)
+			}
+		}
+	}()
+
 	backupTime := time.Now()
 
 	// Record the backup in the database
@@ -97,7 +110,6 @@ func (s *Service) Backup(ctx context.Context) error {
 				log.Error(err),
 				log.String("component", "backup-service"),
 			)
-			// Don't fail the backup, just warn - the backup is still valid
 		}
 	}
 
@@ -105,9 +117,7 @@ func (s *Service) Backup(ctx context.Context) error {
 	if err := s.deleteLocalBackup(ctx, traceID, backupFile); err != nil {
 		return err
 	}
-
-	// Run garbage collection
-	s.runGC(traceID)
+	cleanedUp = true
 
 	s.logger.Info(traceID, "Backup workflow completed successfully", nil,
 		log.String("component", "backup-service"),
@@ -148,6 +158,9 @@ func (s *Service) uploadBackup(ctx context.Context, traceID, backupFilePath stri
 	if err := s.storage.Upload(ctx, file, fileInfo.Name(), uploadOpts); err != nil {
 		return fmt.Errorf("unable to upload backup file: %w", err)
 	}
+
+	// Reclaim memory from upload buffers (Google Drive SDK buffers entire file)
+	runtime.GC()
 
 	s.logger.Info(traceID, "Backup uploaded to storage", nil,
 		log.String("filename", fileInfo.Name()),
@@ -202,11 +215,7 @@ func (s *Service) verifyBackup(ctx context.Context, traceID, backupFilePath stri
 
 // recordBackup records the backup metadata in the database
 func (s *Service) recordBackup(ctx context.Context, traceID, backupFile string, backupTime time.Time) error {
-	// Extract just the filename from the path
-	filename := backupFile
-	if idx := len(s.cfg.BACKUP_DIR) + 1; idx < len(backupFile) {
-		filename = backupFile[idx:]
-	}
+	filename := filepath.Base(backupFile)
 
 	_, err := s.db.Exec(ctx,
 		"INSERT INTO database_backups (backup_file, backup_time) VALUES ($1, $2)",
@@ -246,13 +255,6 @@ func (s *Service) deleteLocalBackup(ctx context.Context, traceID, backupFilePath
 	)
 
 	return nil
-}
-
-// runGC runs garbage collection to manage memory
-func (s *Service) runGC(traceID string) {
-	s.logger.Debug(traceID, "Running garbage collection", nil)
-	runtime.GC()
-	s.logger.Debug(traceID, "Garbage collection completed", nil)
 }
 
 // EnsureBackupTable creates the backup tracking table if it doesn't exist
@@ -300,6 +302,9 @@ func (s *Service) ListBackups(ctx context.Context, limit int) ([]BackupRecord, e
 			return nil, fmt.Errorf("unable to scan backup record: %w", err)
 		}
 		backups = append(backups, record)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("error iterating backup rows: %w", err)
 	}
 
 	s.logger.Info(traceID, "Backups retrieved", nil, log.Int("count", len(backups)))
@@ -424,6 +429,9 @@ func (s *Service) GetBackupsOlderThan(ctx context.Context, cutoff time.Time) ([]
 		}
 		records = append(records, record)
 	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("error iterating backup rows: %w", err)
+	}
 
 	return records, nil
 }
@@ -461,29 +469,12 @@ func (s *Service) deleteBackup(ctx context.Context, traceID string, record Backu
 	return nil
 }
 
-// isNotFoundError checks if an error indicates the file was not found
 func isNotFoundError(err error) bool {
-	if err == nil {
-		return false
-	}
-	errStr := err.Error()
-	return strings.Contains(errStr, "not found") ||
-		strings.Contains(errStr, "no such") ||
-		strings.Contains(errStr, "does not exist") ||
-		strings.Contains(errStr, "404")
+	return errors.Is(err, storage.ErrNotFound)
 }
 
 // DeleteBackupRecord deletes a backup record from the database
 func (s *Service) DeleteBackupRecord(ctx context.Context, id int) error {
 	_, err := s.db.Exec(ctx, "DELETE FROM database_backups WHERE id = $1", id)
 	return err
-}
-
-// io.Reader adapter for file upload
-type readerAdapter struct {
-	io.Reader
-}
-
-func (r *readerAdapter) Close() error {
-	return nil
 }

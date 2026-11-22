@@ -65,6 +65,8 @@ type Builder struct {
 	opts  Options
 	site  *Site
 	pages []*Page
+	nav   *Nav
+	docs  map[string]*Doc
 }
 
 // Build renders the full site into opts.OutDir.
@@ -95,6 +97,12 @@ func (b *Builder) run() error {
 	}
 
 	if err := b.renderStyleguide(); err != nil {
+		return err
+	}
+	if err := b.loadDocs(); err != nil {
+		return err
+	}
+	if err := b.renderDocs(); err != nil {
 		return err
 	}
 

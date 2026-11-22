@@ -52,6 +52,7 @@ jobs:
         uses: actions/setup-go@v7
         with:
           go-version-file: site/go.mod
+          cache-dependency-path: site/go.sum
 
       - name: Test generator
         run: go test ./...

@@ -1,0 +1,9 @@
+{
+  "default": "introduction",
+  "sections": [
+    {
+      "title": "Getting started",
+      "pages": ["introduction", "quick-start", "installation"]
+    }
+  ]
+}

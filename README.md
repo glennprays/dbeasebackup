@@ -4,18 +4,40 @@
   <h1 align="center">DBEaseBackup</h1>
   <p align="center">Scheduled database backups to Google Drive or S3, verified and pruned by retention.</p>
   <p align="center">
-    <a href="https://dbease.glennprays.com/docs/"><img src="https://img.shields.io/badge/docs-dbease.glennprays.com-b4441c" alt="Documentation"></a>
+    <a href="https://dbease.glennprays.com/"><img src="https://img.shields.io/badge/website-dbease.glennprays.com-b4441c" alt="Website"></a>
+    <a href="https://dbease.glennprays.com/docs/"><img src="https://img.shields.io/badge/docs-read-b4441c" alt="Documentation"></a>
     <a href="https://github.com/glennprays/dbeasebackup/actions/workflows/build-docker-image.yml"><img src="https://github.com/glennprays/dbeasebackup/actions/workflows/build-docker-image.yml/badge.svg" alt="Build Docker Image Status"></a>
     <a href="https://hub.docker.com/r/glennprays/dbeasebackup"><img src="https://img.shields.io/docker/v/glennprays/dbeasebackup?label=Docker&color=blue" alt="Docker Image"></a>
     <img src="https://img.shields.io/badge/License-MIT-green.svg" alt="License">
+  </p>
+  <p align="center">
+    <a href="https://dbease.glennprays.com/">Website</a> ·
+    <a href="https://dbease.glennprays.com/docs/">Documentation</a> ·
+    <a href="https://dbease.glennprays.com/docs/quick-start/">Quick start</a> ·
+    <a href="https://hub.docker.com/r/glennprays/dbeasebackup">Docker Hub</a>
   </p>
 </p>
 
 DBEaseBackup is a single Go process that backs up each configured database target on its own cron schedule, verifies the backup, uploads it to Google Drive or an S3-compatible bucket, and deletes copies older than the target's retention window. It keeps no state of its own and exposes `/health`, `/readyz` and `/livez` for your orchestrator.
 
-PostgreSQL is supported today, with `pg_dump` (one database) and `pg_basebackup` (whole cluster) modes. Support for more database engines is planned.
+## Features
 
-**Documentation: https://dbease.glennprays.com/docs/**
+- **Many targets, one process.** A `targets.yaml` lists every database with its own connection, cron schedule, mode, retention, retries and storage folder. Secrets stay in environment variables.
+- **Two backup modes.** `dump` runs `pg_dump -F c` for one database. `basebackup` runs `pg_basebackup` for the whole cluster and checks it with `pg_verifybackup` before upload.
+- **Verified backups.** Base backups that fail verification are never uploaded. Dumps are downloaded again after upload and read with `pg_restore --list`.
+- **Google Drive or S3.** Google Drive through a service account, or any S3-compatible service (AWS S3, MinIO, Cloudflare R2, Backblaze B2, DigitalOcean Spaces).
+- **Retention without a catalog.** Cleanup reads the UTC timestamp in each filename and deletes files older than `retention_days`.
+- **Retries and limits.** Failed runs retry with backoff, overlapping runs of one target are skipped, and `MAX_PARALLEL_BACKUPS` caps concurrent backups.
+- **Easy to monitor.** `/health`, `/readyz` and `/livez` endpoints, an HMAC-signed webhook after each run, and JSON logs with trace IDs.
+
+## Supported engines and storage
+
+| | Today | Planned |
+| --- | --- | --- |
+| Databases | PostgreSQL (client tools 16 in the image) | More engines |
+| Storage | Google Drive, S3 and S3-compatible | |
+
+Read the full documentation at **https://dbease.glennprays.com/docs/**.
 
 ## Quick start
 
@@ -64,7 +86,7 @@ curl -s localhost:8080/health
 ```
 
 > [!NOTE]
-> `TARGETS_FILE`, `basebackup` mode and retries arrive in the first release after `v2.2.0`. On `v2.2.0` and older, use the [legacy single-database variables](https://dbease.glennprays.com/docs/legacy-single-db/).
+> `TARGETS_FILE`, `basebackup` mode and retries need `v2.3.0` or newer. On `v2.2.0` and older, use the [legacy single-database variables](https://dbease.glennprays.com/docs/legacy-single-db/). Upgrading from `v2.2.0`? Read [Upgrading](https://dbease.glennprays.com/docs/installation/#from-v220-or-older) first.
 
 The full walkthrough, including Google Drive, is in the [quick start](https://dbease.glennprays.com/docs/quick-start/).
 
@@ -77,7 +99,7 @@ The full walkthrough, including Google Drive, is in the [quick start](https://db
 - [Health checks](https://dbease.glennprays.com/docs/health-checks/), [webhooks](https://dbease.glennprays.com/docs/webhooks/) and [logging](https://dbease.glennprays.com/docs/logging/)
 - [Security](https://dbease.glennprays.com/docs/security/) and [troubleshooting](https://dbease.glennprays.com/docs/troubleshooting/)
 
-The docs source lives in [`site/content/docs`](./site/content/docs). Build and preview the site locally with `make site-serve` (http://localhost:4000).
+The website and docs are built from [`site/`](./site) and deployed to https://dbease.glennprays.com/ by [GitHub Actions](./.github/workflows/pages.yml). Docs pages live in [`site/content/docs`](./site/content/docs). Preview locally with `make site-serve` (http://localhost:4000).
 
 ## Build from source
 

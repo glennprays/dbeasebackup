@@ -80,3 +80,10 @@ GitHub releases are tags only; there are no prebuilt binaries attached. Use the 
 ## Upgrading
 
 Configuration is read only at startup, so an upgrade is a restart with the new image. Nothing is migrated: the process keeps no state besides the files in storage.
+
+### From v2.2.0 or older
+
+- Backups made by `v2.2.0` and older are named `backup_<YYYY-MM-DD_HH-MM-SS>.tar`. [Retention](/docs/retention/) now reads the timestamp from `<name>_<mode>_<UTC timestamp>` filenames only, so it never deletes those older files. Remove them by hand once they fall outside your retention window.
+- The `database_backups` table that older releases created in the backed-up database is no longer read or written. You can drop it.
+- Dumps are now custom format (`.dump`) instead of tar. `pg_restore` reads both, so old files still restore the same way.
+- The legacy single-database variables still work. See [Legacy single-DB mode](/docs/legacy-single-db/).

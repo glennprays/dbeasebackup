@@ -1,0 +1,41 @@
+{{/*
+Component partials. Call with dict, e.g.
+  {{template "btn" (dict "Href" "/docs/" "Label" "Read the docs" "Kind" "primary")}}
+*/}}
+
+{{/* Button. Kind: primary | outline. */}}
+{{define "btn"}}<a class="btn btn--{{.Kind}}" href="{{.Href}}">{{.Label}}</a>{{end}}
+
+{{/* Text link with trailing chevron. */}}
+{{define "link-more"}}<a class="link-more" href="{{.Href}}">{{.Label}}<svg aria-hidden="true" viewBox="0 0 16 16" width="12" height="12"><path d="M6 3.5 10.5 8 6 12.5" fill="none" stroke="currentColor" stroke-width="1.5"/></svg></a>{{end}}
+
+{{/* Square mono tag. Kind (optional): ok | warn | fail. */}}
+{{define "tag"}}<span class="tag{{with .Kind}} tag--{{.}}{{end}}">{{.Label}}</span>{{end}}
+
+{{/* One-line shell command with copy button (button appears only with JS). */}}
+{{define "copy-cmd"}}
+<div class="cmd">
+  <span class="cmd__prompt" aria-hidden="true">$</span>
+  <code class="cmd__text" data-copy-source>{{.Cmd}}</code>
+  <button type="button" class="cmd__copy" data-copy hidden>Copy</button>
+</div>
+{{end}}
+
+{{/* Highlighted code block. Dot is a CodeBlock. */}}
+{{define "code"}}
+<figure class="code">
+  <figcaption class="code__bar">
+    <span class="code__lang">{{if .Caption}}{{.Caption}}{{else}}{{.Lang}}{{end}}</span>
+    <button type="button" class="code__copy" data-copy hidden>Copy</button>
+  </figcaption>
+  <pre class="chroma" tabindex="0"><code data-copy-source>{{.HTML}}</code></pre>
+</figure>
+{{end}}
+
+{{/* Callout. Kind: note | warn | fail. Body is trusted HTML or text. */}}
+{{define "callout"}}
+<aside class="callout callout--{{.Kind}}">
+  <p class="callout__label">{{if eq .Kind "warn"}}Warning{{else if eq .Kind "fail"}}Caution{{else}}Note{{end}}</p>
+  <div class="callout__body">{{.Body}}</div>
+</aside>
+{{end}}

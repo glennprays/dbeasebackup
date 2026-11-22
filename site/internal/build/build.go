@@ -151,6 +151,23 @@ func (b *Builder) writeAsset(urlPath string, data []byte) error {
 
 func (b *Builder) funcs() template.FuncMap {
 	return template.FuncMap{
+		// dict builds a map for passing named arguments to partials.
+		"dict": func(kv ...any) (map[string]any, error) {
+			if len(kv)%2 != 0 {
+				return nil, fmt.Errorf("dict: odd number of arguments")
+			}
+			m := make(map[string]any, len(kv)/2)
+			for i := 0; i < len(kv); i += 2 {
+				k, ok := kv[i].(string)
+				if !ok {
+					return nil, fmt.Errorf("dict: key %v is not a string", kv[i])
+				}
+				m[k] = kv[i+1]
+			}
+			return m, nil
+		},
+		// code highlights a snippet for the "code" partial.
+		"code": NewCodeBlock,
 		// asset returns a cache-busted URL for a file under /assets/.
 		"asset": func(p string) (string, error) {
 			u := "/assets/" + strings.TrimPrefix(p, "/")

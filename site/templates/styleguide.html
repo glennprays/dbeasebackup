@@ -42,7 +42,56 @@
     </ol>
   </section>
 
-  {{block "sg-components" .}}{{end}}
+  <section class="sg__section sg__components" aria-labelledby="sg-components">
+    <h2 id="sg-components">Components</h2>
+
+    <h3>Buttons</h3>
+    <div class="sg__row">
+      {{template "btn" (dict "Href" "#sg-components" "Label" "Read the docs" "Kind" "primary")}}
+      {{template "btn" (dict "Href" "#sg-components" "Label" "View on GitHub" "Kind" "outline")}}
+      {{template "link-more" (dict "Href" "#sg-components" "Label" "How retention works")}}
+    </div>
+
+    <h3>Tags</h3>
+    <div class="sg__row">
+      {{template "tag" (dict "Label" "dump")}}
+      {{template "tag" (dict "Label" "basebackup")}}
+      {{template "tag" (dict "Label" "ok" "Kind" "ok")}}
+      {{template "tag" (dict "Label" "retrying" "Kind" "warn")}}
+      {{template "tag" (dict "Label" "failed" "Kind" "fail")}}
+    </div>
+
+    <h3>Copy command</h3>
+    {{template "copy-cmd" (dict "Cmd" "docker run -d --env-file .env glennprays/dbeasebackup:latest")}}
+
+    <h3>Code block</h3>
+    {{template "code" (code "yaml" "targets.yaml" "targets:\n  - name: app-db   # unique, lower-case\n    mode: dump\n    schedule: \"0 2 * * *\"\n    retention_days: 30\n    verify: true")}}
+
+    <h3>Callouts</h3>
+    {{template "callout" (dict "Kind" "note" "Body" "Retention reads storage, not a catalog. Do not rename uploaded files.")}}
+    {{template "callout" (dict "Kind" "warn" "Body" "basebackup needs about twice the cluster size in free local disk.")}}
+    {{template "callout" (dict "Kind" "fail" "Body" "Deleting a target's files in storage cannot be undone.")}}
+
+    <h3>Ledger</h3>
+    <div class="ledger-wrap">
+      <table class="ledger">
+        <caption class="label">Example data</caption>
+        <thead><tr><th>Target</th><th>Mode</th><th>File</th><th class="num">Size</th><th>Status</th></tr></thead>
+        <tbody>
+          <tr><td>app-db</td><td>dump</td><td>app-db_dump_20261122T020000Z.dump</td><td class="num">412 MB</td><td>{{template "tag" (dict "Label" "ok" "Kind" "ok")}}</td></tr>
+          <tr><td>prod-cluster</td><td>basebackup</td><td>prod-cluster_basebackup_20261122T040000Z.tar.gz</td><td class="num">9.8 GB</td><td>{{template "tag" (dict "Label" "failed" "Kind" "fail")}}</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <h3>Environment variable list</h3>
+    <dl class="envlist">
+      <div class="envlist__item">
+        <dt><code>MAX_PARALLEL_BACKUPS</code></dt>
+        <dd><div class="envlist__meta">{{template "tag" (dict "Label" "default 1")}}{{template "tag" (dict "Label" "optional")}}</div><p>How many targets may back up at the same time.</p></dd>
+      </div>
+    </dl>
+  </section>
 </main>
 {{end}}
 

@@ -16,6 +16,10 @@
 </head>
 <body>
 <a class="skip-link" href="#main">Skip to content</a>
+{{template "site-header" .}}
 {{template "content" .}}
+{{template "site-footer" .}}
+<script src="{{asset "js/copy.js"}}" defer></script>
+{{block "scripts" .}}{{end}}
 </body>
 </html>

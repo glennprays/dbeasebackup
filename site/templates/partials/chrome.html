@@ -1,0 +1,52 @@
+{{/* Site header and footer. Expects a *Page as dot. */}}
+
+{{define "site-header"}}
+<header class="site-header">
+  <div class="wrap site-header__inner">
+    <a class="brand" href="/" aria-label="DBEaseBackup home">
+      <img class="brand__mark" src="{{asset "img/logo-64.png"}}" alt="" width="24" height="24">
+      <span class="brand__name">DBEaseBackup</span>
+    </a>
+    {{with .Site.Version}}<a class="tag tag--version" href="{{$.Site.Repo}}/releases/tag/{{.}}" title="Latest release">{{.}}</a>{{end}}
+    <nav class="site-nav" aria-label="Primary">
+      <a href="/docs/" {{if eq .Section "docs"}}aria-current="page"{{end}}>Docs</a>
+      <a href="/docs/quick-start/">Quick start</a>
+      <a href="{{.Site.Repo}}">GitHub</a>
+    </nav>
+    {{if eq .Section "docs"}}
+    <button type="button" class="search-trigger" data-search-open hidden aria-haspopup="dialog">
+      <span>Search docs</span><kbd>/</kbd>
+    </button>
+    {{end}}
+  </div>
+</header>
+{{end}}
+
+{{define "site-footer"}}
+<footer class="site-footer">
+  <div class="wrap site-footer__inner">
+    <div class="site-footer__brand">
+      <p class="brand__name">DBEaseBackup</p>
+      <p class="site-footer__note">Scheduled PostgreSQL backups to Google Drive or S3. MIT licensed.</p>
+    </div>
+    <nav class="site-footer__col" aria-label="Documentation">
+      <p class="label">Docs</p>
+      <a href="/docs/quick-start/">Quick start</a>
+      <a href="/docs/targets-file/">Targets file</a>
+      <a href="/docs/environment-variables/">Environment variables</a>
+      <a href="/docs/restoring/">Restoring</a>
+    </nav>
+    <nav class="site-footer__col" aria-label="Project">
+      <p class="label">Project</p>
+      <a href="{{.Site.Repo}}">Source on GitHub</a>
+      <a href="{{.Site.Repo}}/releases">Releases</a>
+      <a href="https://hub.docker.com/r/glennprays/dbeasebackup">Docker Hub image</a>
+      <a href="{{.Site.Repo}}/issues">Issues</a>
+    </nav>
+  </div>
+  <div class="wrap site-footer__meta">
+    <span>© Glenn Prays · MIT License</span>
+    {{with .Site.Version}}<span>Docs for {{.}}</span>{{end}}
+  </div>
+</footer>
+{{end}}

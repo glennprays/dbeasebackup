@@ -30,5 +30,8 @@ go.work.sum
 
 /backups
 
+# rendered public site (built by site/cmd/docs-gen)
+/_site/
+
 # google service account key
 service-account-key.json

@@ -72,9 +72,23 @@ docker-build:
 docker-run: docker-build
 	docker run -it --rm $(BINARY_NAME)
 
+## site: Build the public site into _site/
+.PHONY: site site-serve site-test
+site:
+	cd site && $(GO) run ./cmd/docs-gen build ../_site
+
+## site-serve: Build and serve the site on localhost port 4000
+site-serve:
+	cd site && $(GO) run ./cmd/docs-gen serve ../_site
+
+## site-test: Run the site generator tests
+site-test:
+	cd site && $(GO) test ./...
+
 ## clean: Remove build artifacts
 clean:
 	rm -f $(BINARY_NAME)
+	rm -rf _site
 	$(GO) clean
 
 ## help: Show this help

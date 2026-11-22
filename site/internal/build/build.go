@@ -110,14 +110,7 @@ func (b *Builder) run() error {
 		return err
 	}
 
-	landing := &Page{
-		Site:        b.site,
-		Title:       "DBEaseBackup",
-		Description: "Scheduled PostgreSQL backups to Google Drive or S3.",
-		Path:        "/",
-		Section:     "home",
-	}
-	if err := b.renderPage("landing.html", landing); err != nil {
+	if err := b.renderLanding(); err != nil {
 		return err
 	}
 

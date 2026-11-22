@@ -1,7 +1,184 @@
 {{define "content"}}
-<main id="main" class="wrap">
-  <h1>DBEaseBackup</h1>
-  <p>Scheduled PostgreSQL backups to Google Drive or S3. Site under construction.</p>
-  {{with .Site.Version}}<p>Latest release: {{.}}</p>{{end}}
+{{$d := .Data}}
+<main id="main">
+
+  <section class="hero wrap" aria-labelledby="hero-title">
+    <div class="hero__text">
+      <p class="label">Self-hosted · PostgreSQL · MIT licensed</p>
+      <h1 id="hero-title" class="hero__title">PostgreSQL backups on a schedule, checked and shipped off the box.</h1>
+      <p class="hero__lede">DBEaseBackup runs <code>pg_dump</code> or <code>pg_basebackup</code> for each target on its own cron schedule, verifies the result, uploads it to Google Drive or S3, and deletes copies older than your retention window.</p>
+      {{template "copy-cmd" (dict "Cmd" $d.DockerRun)}}
+      <div class="btn-pair">
+        {{template "btn" (dict "Href" "/docs/quick-start/" "Label" "Read the quick start" "Kind" "primary")}}
+        {{template "btn" (dict "Href" .Site.Repo "Label" "View source on GitHub" "Kind" "outline")}}
+      </div>
+      {{if $d.PreRelease}}
+      <p class="hero__note">Targets files, <code>basebackup</code> mode and retries ship in the first release after {{with .Site.Version}}{{.}}{{else}}v2.2.0{{end}}. Older images use the <a href="/docs/legacy-single-db/">legacy single-database variables</a>.</p>
+      {{end}}
+    </div>
+
+    <figure class="ledger-panel" aria-labelledby="ledger-caption">
+      <figcaption id="ledger-caption" class="ledger-panel__head">
+        <span class="label">Backup ledger</span>
+        <span class="ledger-panel__meta">Example data · Sunday 22 Nov 2026, UTC</span>
+      </figcaption>
+      <div class="ledger-wrap">
+        <table class="ledger">
+          <thead>
+            <tr>
+              <th scope="col">Target</th>
+              <th scope="col">Mode</th>
+              <th scope="col">Schedule</th>
+              <th scope="col">Last run</th>
+              <th scope="col">Uploaded file</th>
+              <th scope="col" class="num">Size</th>
+              <th scope="col" class="num">Kept</th>
+              <th scope="col">Status</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>app-db</td><td>dump</td><td>0 2 * * *</td><td>02:00:00</td>
+              <td>app-db_dump_20261122T020000Z.dump</td><td class="num">412 MB</td><td class="num">30 d</td>
+              <td>{{template "tag" (dict "Label" "ok" "Kind" "ok")}}</td>
+            </tr>
+            <tr>
+              <td>prod-cluster</td><td>basebackup</td><td>0 4 * * 0</td><td>04:00:00</td>
+              <td class="ledger__muted">not uploaded · pg_verifybackup failed</td><td class="num">–</td><td class="num">7 d</td>
+              <td>{{template "tag" (dict "Label" "failed" "Kind" "fail")}}</td>
+            </tr>
+            <tr>
+              <td>etl-db</td><td>dump</td><td>0 */6 * * *</td><td>06:00:00</td>
+              <td>etl-db_dump_20261122T060231Z.dump</td><td class="num">1.8 GB</td><td class="num">14 d</td>
+              <td>{{template "tag" (dict "Label" "ok · attempt 2" "Kind" "warn")}}</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+      <p class="ledger-panel__foot">Each row is one target from the targets file. Status comes from <code>/health</code> and the run's webhook. A base backup that fails <code>pg_verifybackup</code> is never uploaded; the retried <code>etl-db</code> run has its own timestamp.</p>
+    </figure>
+  </section>
+
+  <section class="band-section wrap" aria-labelledby="run-title">
+    <header class="section-head">
+      <p class="label">01 / A run</p>
+      <h2 id="run-title">What happens every time a schedule fires</h2>
+      <p class="section-head__lede">The same seven steps for every target. Each one is logged with the run's trace ID.</p>
+    </header>
+    <ol class="steps">
+      <li><span class="steps__n">01</span><h3>Schedule</h3><p>Each target fires on its own cron expression in <code>SCHEDULER_TIMEZONE</code>. A trigger that arrives while the previous run of that target is still going is skipped, not queued.</p></li>
+      <li><span class="steps__n">02</span><h3>Back up</h3><p><code>pg_dump -F c</code> for one database, or <code>pg_basebackup -Fp -Xs</code> for the whole cluster, into the target's local <code>backup_dir</code>.</p></li>
+      <li><span class="steps__n">03</span><h3>Verify</h3><p>Base backups pass <code>pg_verifybackup</code> before anything leaves the host. Dumps are downloaded again after upload and read with <code>pg_restore --list</code>.</p></li>
+      <li><span class="steps__n">04</span><h3>Upload</h3><p>To a Google Drive folder with 8 MiB resumable chunks, or to an S3-compatible bucket under <code>S3_PREFIX</code>.</p></li>
+      <li><span class="steps__n">05</span><h3>Clean up locally</h3><p>The staging file is deleted, also when a later step fails, so the disk does not fill up.</p></li>
+      <li><span class="steps__n">06</span><h3>Retry and report</h3><p>A failed attempt retries after 30 s, then 2 min. When the run ends, one webhook signed with HMAC-SHA256 reports the outcome.</p></li>
+      <li><span class="steps__n">07</span><h3>Retention</h3><p>A cleanup job lists storage, reads the UTC timestamp in each filename and deletes files older than <code>retention_days</code>. No catalog database to keep in sync.</p></li>
+    </ol>
+    {{template "link-more" (dict "Href" "/docs/introduction/" "Label" "How a run works, in detail")}}
+  </section>
+
+  <section class="split-section wrap" aria-labelledby="config-title">
+    <header class="section-head">
+      <p class="label">02 / Configure</p>
+      <h2 id="config-title">One file lists every target</h2>
+      <p class="section-head__lede">Each target carries its own connection, schedule, mode, retention, retries and storage folder. Secrets stay in the environment.</p>
+      <dl class="notes">
+        <div><dt><code>name</code></dt><dd>Prefix of every file and the key retention uses to find them.</dd></div>
+        <div><dt><code>password_env</code></dt><dd>Name of an env var holding the password. It reaches <code>pg_dump</code> as <code>PGPASSWORD</code>, never as an argument.</dd></div>
+        <div><dt><code>schedule</code></dt><dd>Standard five-field cron. Stagger targets to spread load.</dd></div>
+        <div><dt><code>retention_days</code></dt><dd><code>0</code> keeps everything; the default is 30.</dd></div>
+      </dl>
+      {{template "link-more" (dict "Href" "/docs/targets-file/" "Label" "Every field and its default")}}
+    </header>
+    <div class="split-section__code">
+      {{template "code" $d.Targets}}
+    </div>
+  </section>
+
+  <section class="wrap" aria-labelledby="modes-title">
+    <header class="section-head">
+      <p class="label">03 / Modes</p>
+      <h2 id="modes-title">A logical dump or a physical copy, per target</h2>
+    </header>
+    <div class="table-wrap compare">
+      <table>
+        <thead>
+          <tr><th scope="col"></th><th scope="col"><code>dump</code></th><th scope="col"><code>basebackup</code></th></tr>
+        </thead>
+        <tbody>
+          <tr><th scope="row">Scope</th><td>One database</td><td>The whole cluster, roles included</td></tr>
+          <tr><th scope="row">Output</th><td><code>&lt;name&gt;_dump_&lt;ts&gt;.dump</code>, custom format</td><td><code>&lt;name&gt;_basebackup_&lt;ts&gt;.tar.gz</code></td></tr>
+          <tr><th scope="row">Checked</th><td>After upload, <code>pg_restore --list</code></td><td>Before upload, <code>pg_verifybackup</code>, fail closed</td></tr>
+          <tr><th scope="row">Needs</th><td>Read access to the database</td><td><code>REPLICATION</code> role, client tools 13+</td></tr>
+          <tr><th scope="row">Restore</th><td>Any same-or-newer major version, one table at a time if you like</td><td>Same major version, whole data directory</td></tr>
+        </tbody>
+      </table>
+    </div>
+    {{template "link-more" (dict "Href" "/docs/backup-modes/" "Label" "Choosing a mode")}}
+  </section>
+
+  <section class="wrap" aria-labelledby="storage-title">
+    <header class="section-head">
+      <p class="label">04 / Storage</p>
+      <h2 id="storage-title">Off the database host, into storage you already pay for</h2>
+    </header>
+    <div class="duo">
+      <article class="duo__item">
+        <h3>Google Drive</h3>
+        <p>A service account uploads into a folder you share with it, one folder per target.</p>
+        <ul class="facts">
+          <li>Resumable uploads in 8 MiB chunks, flat memory use</li>
+          <li><code>storage.folder_id</code> per target</li>
+          <li>Health check lists one file to prove the key works</li>
+        </ul>
+        {{template "link-more" (dict "Href" "/docs/google-drive/" "Label" "Set up Google Drive")}}
+      </article>
+      <article class="duo__item">
+        <h3>S3 and compatible</h3>
+        <p>AWS S3, MinIO, Cloudflare R2, Backblaze B2 or DigitalOcean Spaces through one client.</p>
+        <ul class="facts">
+          <li>Keys at <code>&lt;S3_PREFIX&gt;/&lt;filename&gt;</code></li>
+          <li>Needs only <code>ListBucket</code>, <code>PutObject</code>, <code>GetObject</code>, <code>DeleteObject</code></li>
+          <li>Health check confirms the bucket exists</li>
+        </ul>
+        {{template "link-more" (dict "Href" "/docs/s3/" "Label" "Set up S3")}}
+      </article>
+    </div>
+  </section>
+
+  <section class="split-section wrap" aria-labelledby="ops-title">
+    <header class="section-head">
+      <p class="label">05 / Operate</p>
+      <h2 id="ops-title">Easy to watch from the outside</h2>
+      <p class="section-head__lede">Probes for your orchestrator, a webhook for your alerts and JSON logs for your collector.</p>
+      <dl class="notes">
+        <div><dt><code>GET /health</code></dt><dd>200 while storage is reachable, with each target's last run, last success and last error.</dd></div>
+        <div><dt><code>GET /readyz</code></dt><dd>Readiness probe; turns false as shutdown begins.</dd></div>
+        <div><dt><code>GET /livez</code></dt><dd>Liveness probe; the process answers.</dd></div>
+        <div><dt><code>X-Signature-256</code></dt><dd>HMAC-SHA256 of the webhook body, keyed with <code>WEBHOOK_SECRET</code>.</dd></div>
+      </dl>
+      {{template "link-more" (dict "Href" "/docs/webhooks/" "Label" "Webhook payload and verification")}}
+    </header>
+    <div class="split-section__code">
+      {{template "code" (code "json" "POST $WEBHOOK_URL · payload excerpt" "{\n  \"event_type\": \"backup\",\n  \"status\": \"success\",\n  \"target\": \"app-db\",\n  \"duration\": \"1m12.530s\",\n  \"timestamp\": \"2026-11-22T02:01:12.53Z\",\n  \"trace_id\": \"8a8f4c1e-2c43-4f0e-9c55-0f4c7b1d9e21\"\n}")}}
+    </div>
+  </section>
+
+  <section class="start wrap" aria-labelledby="start-title">
+    <header class="section-head">
+      <p class="label">06 / Start</p>
+      <h2 id="start-title">Running in three steps</h2>
+    </header>
+    <ol class="start__steps">
+      <li><span class="steps__n">1</span><p>Write <code>targets.yaml</code> with one target and a <code>backup_dir</code> under <code>/tmp</code>.</p></li>
+      <li><span class="steps__n">2</span><p>Put storage credentials and the database password in <code>.env</code>.</p></li>
+      <li><span class="steps__n">3</span><p>Start the container and check <code>curl localhost:8080/health</code>.</p></li>
+    </ol>
+    <div class="btn-pair">
+      {{template "btn" (dict "Href" "/docs/quick-start/" "Label" "Follow the quick start" "Kind" "primary")}}
+      {{template "btn" (dict "Href" "/docs/restoring/" "Label" "See how restores work" "Kind" "outline")}}
+    </div>
+  </section>
+
 </main>
 {{end}}

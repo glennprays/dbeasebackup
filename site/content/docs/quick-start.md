@@ -40,11 +40,11 @@ TARGETS_FILE=/config/targets.yaml
 APP_DB_PASSWORD=change-me
 
 STORAGE_TYPE=s3
+S3_ENDPOINT=https://s3.us-east-1.amazonaws.com   # required; your MinIO/R2/etc. URL for other services
 S3_BUCKET=my-db-backups
 S3_REGION=us-east-1
 S3_ACCESS_KEY_ID=AKIA...
 S3_SECRET_ACCESS_KEY=...
-# S3_ENDPOINT=https://minio.internal:9000   # for MinIO and other S3-compatible services
 ```
 
 ```bash title=".env (Google Drive)"

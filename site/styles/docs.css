@@ -196,6 +196,13 @@ h3:hover .heading-anchor,
 .prose td:first-child code {
   white-space: nowrap;
 }
+.prose td:not(:last-child) code {
+  white-space: nowrap;
+  overflow-wrap: normal;
+}
+.prose td:last-child code {
+  overflow-wrap: normal;
+}
 
 /* ---------- Pager ---------- */
 .docs-pager {

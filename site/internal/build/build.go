@@ -118,7 +118,11 @@ func (b *Builder) run() error {
 	}
 
 	// GitHub Pages must not run Jekyll over the output.
-	return os.WriteFile(filepath.Join(b.opts.OutDir, ".nojekyll"), nil, 0o644)
+	if err := os.WriteFile(filepath.Join(b.opts.OutDir, ".nojekyll"), nil, 0o644); err != nil {
+		return err
+	}
+	// Last: every internal link and anchor in the output must resolve.
+	return CheckLinks(b.opts.OutDir)
 }
 
 // copyAssets copies site/assets to <out>/assets and records content hashes

@@ -181,6 +181,8 @@ func (b *Builder) funcs() template.FuncMap {
 		},
 		// code highlights a snippet for the "code" partial.
 		"code": NewCodeBlock,
+		// strata renders the animated hero artwork.
+		"strata": func() template.HTML { return StrataSVG(true) },
 		// asset returns a cache-busted URL for a file under /assets/.
 		"asset": func(p string) (string, error) {
 			u := "/assets/" + strings.TrimPrefix(p, "/")

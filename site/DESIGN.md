@@ -92,6 +92,24 @@ replaced.
 - Radius 4px on buttons, inputs, cards and code blocks; 2px on tags.
 - Page max width 1240px, reading measure 68ch.
 
+### Strata artwork
+
+The landing page carries one signature graphic: stacked wave bands, like
+rock strata or layered backups, generated as inline SVG by
+`internal/build/strata.go`.
+
+- Colors come only from `--strata-1` … `--strata-6` (pale clay to oxide,
+  with one deep ink-blue band at the bottom). These tokens are not used
+  anywhere else.
+- It is the single exception to the no-gradient rule: band fills may use
+  linear gradients between neighbouring strata tokens.
+- Motion is a slow horizontal drift per band (CSS `translateX`, tens of
+  seconds per cycle). It stops under `prefers-reduced-motion: reduce`.
+- It is decorative: `aria-hidden="true"`, never behind body text.
+- Desktop: right-hand hero column bleeding to the viewport edge with a
+  diagonal clip. Under 720px: a slanted band above the headline. A smaller
+  band sits in the "06 / Start" section.
+
 ## Do
 
 - Use the accent only for something the reader can act on.
@@ -103,7 +121,8 @@ replaced.
 
 ## Don't
 
-- No shadows, gradients, glows, glass or blur effects.
+- No shadows, gradients, glows, glass or blur effects (the strata artwork
+  above is the only gradient).
 - No pill buttons, no radius above 4px.
 - No bold headings; weight 300 at display sizes is the identity.
 - No emoji or decorative icon sets; no stock illustrations.

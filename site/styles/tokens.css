@@ -52,6 +52,15 @@
   /* Modal backdrop: ink at 32% */
   --color-backdrop: rgb(27 30 36 / 0.32);
 
+  /* Strata artwork (landing hero and start section). The only place gradients
+     appear; light to deep, all in the accent family plus one ink-blue. */
+  --strata-1: #f6ebe2;
+  --strata-2: #efc3a3;
+  --strata-3: #de8a57;
+  --strata-4: #b4441c;
+  --strata-5: #7a2e14;
+  --strata-6: #1d3b57;
+
   /* The single accent: actions, links, focus, icon strokes. */
   --color-accent: #b4441c;
   --color-accent-hover: #9a3816;

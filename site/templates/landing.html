@@ -3,10 +3,11 @@
 <main id="main">
 
   <section class="hero wrap" aria-labelledby="hero-title">
+    <div class="hero-art" aria-hidden="true">{{strata}}</div>
     <div class="hero__text">
-      <p class="label">Self-hosted · PostgreSQL · MIT licensed</p>
-      <h1 id="hero-title" class="hero__title">PostgreSQL backups on a schedule, checked and shipped off the box.</h1>
-      <p class="hero__lede">DBEaseBackup runs <code>pg_dump</code> or <code>pg_basebackup</code> for each target on its own cron schedule, verifies the result, uploads it to Google Drive or S3, and deletes copies older than your retention window.</p>
+      <p class="label">Self-hosted · Database backups · MIT licensed</p>
+      <h1 id="hero-title" class="hero__title">Database backups on a schedule, checked and shipped off the box.</h1>
+      <p class="hero__lede">DBEaseBackup runs each target's backup on its own cron schedule, verifies the result, uploads it to Google Drive or S3, and deletes copies older than your retention window. PostgreSQL is supported today through <code>pg_dump</code> and <code>pg_basebackup</code>; more engines are planned.</p>
       {{template "copy-cmd" (dict "Cmd" $d.DockerRun)}}
       <div class="btn-pair">
         {{template "btn" (dict "Href" "/docs/quick-start/" "Label" "Read the quick start" "Kind" "primary")}}
@@ -97,7 +98,7 @@
 
   <section class="wrap" aria-labelledby="modes-title">
     <header class="section-head">
-      <p class="label">03 / Modes</p>
+      <p class="label">03 / Modes · PostgreSQL</p>
       <h2 id="modes-title">A logical dump or a physical copy, per target</h2>
     </header>
     <div class="table-wrap compare">
@@ -165,6 +166,7 @@
   </section>
 
   <section class="start wrap" aria-labelledby="start-title">
+    <div class="start__art" aria-hidden="true">{{strata}}</div>
     <header class="section-head">
       <p class="label">06 / Start</p>
       <h2 id="start-title">Running in three steps</h2>

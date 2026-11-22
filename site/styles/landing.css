@@ -21,6 +21,76 @@
   gap: var(--space-64);
   padding-top: var(--space-80) !important;
 }
+
+/* Strata artwork: right column, bleeding to the viewport edge with a
+   diagonal cut. Text never sits on it, so contrast is unaffected. */
+.hero-art {
+  position: relative;
+  height: 180px;
+  margin: calc(-1 * var(--space-48)) calc(-1 * var(--gutter)) 0;
+  overflow: hidden;
+  background: var(--strata-1);
+  clip-path: polygon(0 0, 100% 0, 100% 62%, 0 100%);
+}
+.hero-art .strata {
+  position: absolute;
+  inset: 0;
+}
+#main {
+  overflow-x: clip;
+}
+.strata {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+.strata__band--drift {
+  animation: strata-drift linear infinite;
+  will-change: transform;
+}
+.strata__band:nth-of-type(odd) {
+  animation-direction: reverse;
+}
+@keyframes strata-drift {
+  from {
+    transform: translateX(0);
+  }
+  to {
+    transform: translateX(-1600px);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .strata__band--drift {
+    animation: none;
+  }
+}
+
+@media (min-width: 1100px) {
+  .hero {
+    grid-template-columns: minmax(0, 7fr) minmax(0, 5fr);
+    column-gap: var(--space-48);
+  }
+  .hero__text {
+    grid-column: 1;
+    grid-row: 1;
+  }
+  .hero-art {
+    display: block;
+    grid-column: 2;
+    grid-row: 1;
+    position: relative;
+    align-self: stretch;
+    height: auto;
+    min-height: 480px;
+    /* bleed from the column to the right edge of the viewport */
+    margin: calc(-1 * var(--space-80)) calc(-1 * (100vw - min(100vw, var(--page-max))) / 2 - var(--gutter)) 0 0;
+    clip-path: polygon(22% 0, 100% 0, 100% 100%, 0 100%);
+    background: var(--strata-1);
+  }
+  .ledger-panel {
+    grid-column: 1 / -1;
+  }
+}
 .hero__text {
   display: grid;
   grid-template-columns: minmax(0, 1fr);
@@ -272,6 +342,18 @@ section > .link-more {
 }
 
 /* ---------- Start ---------- */
+.start__art {
+  height: 120px;
+  margin-bottom: var(--space-64);
+  border-radius: var(--radius);
+  overflow: hidden;
+  background: var(--strata-1);
+  clip-path: polygon(0 0, 100% 0, 100% 100%, 6% 100%);
+}
+.start__art .strata {
+  height: 240px;
+  margin-top: -110px;
+}
 .start__steps {
   list-style: none;
   margin: 0 0 var(--space-40);
@@ -355,4 +437,37 @@ section > .link-more {
   .compare tbody th {
     width: auto;
   }
+}
+
+
+/* ---------- 404 ---------- */
+.notfound {
+  display: grid;
+  gap: var(--space-64);
+  padding-block: var(--space-80) 0;
+}
+.notfound__head {
+  display: grid;
+  gap: var(--space-24);
+  max-width: 760px;
+}
+.notfound__lede {
+  font-size: var(--text-18);
+  color: var(--color-secondary);
+}
+.notfound__nav {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+  gap: var(--space-32) var(--space-48);
+  padding-top: var(--space-48);
+  border-top: var(--hairline);
+}
+.notfound__nav ul {
+  list-style: none;
+  margin: var(--space-8) 0 0;
+  padding: 0;
+  font-size: var(--text-14);
+}
+.notfound__nav li + li {
+  margin-top: var(--space-4);
 }

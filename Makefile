@@ -73,7 +73,7 @@ docker-run: docker-build
 	docker run -it --rm $(BINARY_NAME)
 
 ## site: Build the public site into _site/
-.PHONY: site site-serve site-test
+.PHONY: site site-serve site-test site-og
 site:
 	cd site && $(GO) run ./cmd/docs-gen build ../_site
 
@@ -84,6 +84,13 @@ site-serve:
 ## site-test: Run the site generator tests
 site-test:
 	cd site && $(GO) test ./...
+
+## site-og: Render site/og/og-image.html to the 1200x630 social image (needs Chrome)
+CHROME ?= /Applications/Google Chrome.app/Contents/MacOS/Google Chrome
+site-og:
+	"$(CHROME)" --headless=new --disable-gpu --hide-scrollbars --force-device-scale-factor=1 \
+		--window-size=1200,630 --screenshot="$(CURDIR)/site/assets/img/og-image.png" \
+		"file://$(CURDIR)/site/og/og-image.html"
 
 ## clean: Remove build artifacts
 clean:

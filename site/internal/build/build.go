@@ -113,6 +113,10 @@ func (b *Builder) run() error {
 	if err := b.renderLanding(); err != nil {
 		return err
 	}
+	// After all pages: 404, sitemap (needs the page list), robots, llms.txt.
+	if err := b.writeExtras(); err != nil {
+		return err
+	}
 
 	// GitHub Pages must not run Jekyll over the output.
 	if err := os.WriteFile(filepath.Join(b.opts.OutDir, ".nojekyll"), nil, 0o644); err != nil {

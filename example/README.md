@@ -199,7 +199,7 @@ services:
 
 ## Additional Resources
 
-- [Main README](../README.md) - Full documentation
-- [docs/CONFIGURATION.md](../docs/CONFIGURATION.md) - Detailed configuration reference
-- [docs/TROUBLESHOOTING.md](../docs/TROUBLESHOOTING.md) - Troubleshooting guide
-- [docs/SECURITY.md](../docs/SECURITY.md) - Security best practices
+- [Documentation site](https://dbease.glennprays.com/docs/) - Full documentation
+- [Environment variables](https://dbease.glennprays.com/docs/environment-variables/) - Configuration reference
+- [Troubleshooting](https://dbease.glennprays.com/docs/troubleshooting/) - Troubleshooting guide
+- [Security](https://dbease.glennprays.com/docs/security/) - Security best practices

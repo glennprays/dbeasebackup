@@ -22,6 +22,7 @@ const (
 type Event struct {
 	EventType   EventType   `json:"event_type"`
 	Status      EventStatus `json:"status"`
+	Target      string      `json:"target,omitempty"`
 	Filename    string      `json:"filename,omitempty"`
 	FileSize    int64       `json:"file_size_bytes,omitempty"`
 	Duration    string      `json:"duration"`

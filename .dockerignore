@@ -45,6 +45,9 @@ node_modules
 # Exclude backup files
 /backups
 /img
+# Exclude the public site sources and output (not part of the app image)
+/site
+/_site
 # Exclude google service account key
 service-account-key.json
 

@@ -1,0 +1,29 @@
+{
+  "default": "introduction",
+  "sections": [
+    {
+      "title": "Getting started",
+      "pages": ["introduction", "quick-start", "installation"]
+    },
+    {
+      "title": "Configuration",
+      "pages": ["targets-file", "environment-variables", "legacy-single-db", "schedules"]
+    },
+    {
+      "title": "Backups",
+      "pages": ["backup-modes", "verification", "retention", "restoring"]
+    },
+    {
+      "title": "Storage",
+      "pages": ["google-drive", "s3"]
+    },
+    {
+      "title": "Operations",
+      "pages": ["health-checks", "webhooks", "logging", "concurrency-and-retries"]
+    },
+    {
+      "title": "Reference",
+      "pages": ["security", "troubleshooting"]
+    }
+  ]
+}

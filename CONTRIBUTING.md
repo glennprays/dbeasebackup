@@ -246,7 +246,7 @@ For detailed architecture documentation, see [CLAUDE.md](./CLAUDE.md).
 
 6. **Write tests** for the new implementation
 
-7. **Update documentation** (README.md, docs/, example/)
+7. **Update documentation** (`site/content/docs/`, README.md, example/), then run `make site-test`
 
 ## Pull Request Process
 

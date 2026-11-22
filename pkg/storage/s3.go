@@ -80,10 +80,15 @@ func (s *S3Storage) Upload(ctx context.Context, file io.Reader, filename string,
 		log.String("component", "s3-storage"),
 	)
 
-	// Build the key path using configured prefix
+	// Build the key path using configured prefix. A non-empty
+	// opts.FolderID (per-target storage override) becomes an extra key
+	// segment, mirroring Drive's parent-folder semantics.
 	key := filename
 	if s.prefix != "" {
 		key = filepath.Join(s.prefix, filename)
+	}
+	if opts.FolderID != "" {
+		key = filepath.Join(opts.FolderID, key)
 	}
 
 	// Determine content type

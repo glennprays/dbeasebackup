@@ -1,7 +1,6 @@
 package backup
 
 import (
-	"bytes"
 	"context"
 	"fmt"
 	"os"
@@ -13,13 +12,26 @@ import (
 	"github.com/glennprays/log"
 )
 
-// PostgresConfig holds PostgreSQL-specific configuration
+// BackupFilenameTimestamp is the UTC layout used in backup filenames.
+// It is shared by the dump provider, basebackup provider, and the
+// retention parser.
+const BackupFilenameTimestamp = "20060102T150405Z"
+
+// BackupFilename builds the canonical storage filename:
+// <target>_<mode>_<UTC timestamp>.<ext>
+func BackupFilename(target, mode, ext string, t time.Time) string {
+	return fmt.Sprintf("%s_%s_%s.%s", target, mode, t.UTC().Format(BackupFilenameTimestamp), ext)
+}
+
+// PostgresConfig holds PostgreSQL dump-specific configuration
 type PostgresConfig struct {
 	Host     string
 	Port     string
 	User     string
 	Password string
 	Database string
+	// TargetName identifies the owning target in filenames and logs.
+	TargetName string
 }
 
 // PostgresProvider implements the Provider interface for PostgreSQL
@@ -46,31 +58,24 @@ func (p *PostgresProvider) Name() string {
 	return "postgres-backup"
 }
 
-// Dump creates a pg_dump backup file
+// Dump creates a pg_dump backup file in custom format (-F c)
 func (p *PostgresProvider) Dump(ctx context.Context, backupDir string) (string, error) {
 	traceID := traceid.FromContext(ctx)
 	startTime := time.Now()
 
 	p.logger.Info(traceID, "Starting database dump", nil,
 		log.String("component", "postgres-provider"),
+		log.String("target", p.cfg.TargetName),
 		log.String("database", p.cfg.Database),
 		log.String("timeout", p.timeout.String()),
 	)
-
-	// Clean up stale connections that may block new backup operations
-	if err := p.cleanupStaleConnections(ctx, traceID); err != nil {
-		p.logger.Warn(traceID, "Failed to cleanup stale connections (non-fatal)", nil,
-			log.Error(err),
-			log.String("component", "postgres-provider"),
-		)
-	}
 
 	// Create context with timeout
 	ctx, cancel := context.WithTimeout(ctx, p.timeout)
 	defer cancel()
 
 	backupTime := time.Now()
-	backupFile := fmt.Sprintf("backup_%s.tar", backupTime.Format("2006-01-02_15-04-05"))
+	backupFile := BackupFilename(p.cfg.TargetName, "dump", "dump", backupTime)
 	backupFilePath := fmt.Sprintf("%s/%s", backupDir, backupFile)
 
 	// Ensure backup directory exists
@@ -88,13 +93,13 @@ func (p *PostgresProvider) Dump(ctx context.Context, backupDir string) (string, 
 		"-p", p.cfg.Port,
 		"-U", p.cfg.User,
 		"-d", p.cfg.Database,
-		"-F", "t",
+		"-F", "c",
 		"-f", backupFilePath,
 	)
 	cmd.Env = append(os.Environ(), fmt.Sprintf("PGPASSWORD=%s", p.cfg.Password))
 
-	var stderr bytes.Buffer
-	cmd.Stderr = &stderr
+	stderr := NewLimitedBuffer()
+	cmd.Stderr = stderr
 
 	p.logger.Debug(traceID, "Executing pg_dump command", nil,
 		log.String("component", "postgres-provider"),
@@ -165,42 +170,13 @@ func (p *PostgresProvider) Cleanup(ctx context.Context, filePath string) error {
 	return nil
 }
 
-// ValidateDependencies checks if pg_dump is available in PATH
+// ValidateDependencies checks if pg_dump and pg_restore are available in PATH
 func (p *PostgresProvider) ValidateDependencies() error {
-	_, err := exec.LookPath("pg_dump")
-	if err != nil {
+	if _, err := exec.LookPath("pg_dump"); err != nil {
 		return fmt.Errorf("pg_dump not found in PATH: please install PostgreSQL client tools (postgresql-client on Debian/Ubuntu, postgresql on macOS)")
 	}
-	return nil
-}
-
-// cleanupStaleConnections terminates idle database connections from previous pg_dump operations
-func (p *PostgresProvider) cleanupStaleConnections(ctx context.Context, traceID string) error {
-	p.logger.Debug(traceID, "Cleaning up stale database connections", nil,
-		log.String("component", "postgres-provider"),
-		log.String("database", p.cfg.Database),
-	)
-
-	cmd := exec.CommandContext(ctx, "psql",
-		"-h", p.cfg.Host,
-		"-p", p.cfg.Port,
-		"-U", p.cfg.User,
-		"-d", p.cfg.Database,
-		"-c", "SELECT pg_terminate_backend(pid) FROM pg_stat_activity WHERE datname = current_database() AND state = 'idle' AND pid != pg_backend_pid();",
-	)
-	cmd.Env = append(os.Environ(), fmt.Sprintf("PGPASSWORD=%s", p.cfg.Password))
-
-	var stdout, stderr bytes.Buffer
-	cmd.Stdout = &stdout
-	cmd.Stderr = &stderr
-
-	if err := cmd.Run(); err != nil {
-		return fmt.Errorf("failed to cleanup stale connections: %w (stderr: %s)", err, stderr.String())
+	if _, err := exec.LookPath("pg_restore"); err != nil {
+		return fmt.Errorf("pg_restore not found in PATH: needed for backup verification; please install PostgreSQL client tools (postgresql-client on Debian/Ubuntu, postgresql on macOS)")
 	}
-
-	p.logger.Debug(traceID, "Stale connection cleanup completed", nil,
-		log.String("component", "postgres-provider"),
-	)
-
 	return nil
 }

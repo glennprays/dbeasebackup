@@ -1,0 +1,21 @@
+{{define "content"}}
+<main id="main" class="wrap notfound">
+  <header class="notfound__head">
+    <p class="label">404 · Not found</p>
+    <h1>This page is not in the ledger.</h1>
+    <p class="notfound__lede">The address may be mistyped, or the page moved when the docs were reorganised. Old <code>docs/*.md</code> files from the repository now live under <a href="/docs/">/docs/</a>.</p>
+    <div class="btn-pair">
+      {{template "btn" (dict "Href" "/docs/" "Label" "Open the docs" "Kind" "primary")}}
+      {{template "btn" (dict "Href" "/" "Label" "Back to the home page" "Kind" "outline")}}
+    </div>
+  </header>
+  <nav class="notfound__nav" aria-label="All documentation pages">
+    {{range .Data}}
+    <div>
+      <p class="label">{{.Title}}</p>
+      <ul>{{range .Links}}<li><a href="{{.URL}}">{{.Title}}</a></li>{{end}}</ul>
+    </div>
+    {{end}}
+  </nav>
+</main>
+{{end}}

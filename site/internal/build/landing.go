@@ -65,8 +65,8 @@ func (b *Builder) renderLanding() error {
 	}
 	return b.renderPage("landing.html", &Page{
 		Site:        b.site,
-		Title:       "DBEaseBackup · Scheduled PostgreSQL backups to Google Drive or S3",
-		Description: "DBEaseBackup runs pg_dump or pg_basebackup on cron for every target, verifies the result, uploads it to Google Drive or S3 and enforces retention. One Go process, MIT licensed.",
+		Title:       "DBEaseBackup · Scheduled database backups to Google Drive or S3",
+		Description: "DBEaseBackup backs up every database target on its own cron schedule, verifies the result, uploads it to Google Drive or S3 and enforces retention. PostgreSQL today, more engines planned. One Go process, MIT licensed.",
 		Path:        "/",
 		Section:     "home",
 		Data:        data,

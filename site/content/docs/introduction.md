@@ -3,7 +3,7 @@ title: Introduction
 description: What DBEaseBackup does, how one backup run works, and what it deliberately leaves out.
 ---
 
-DBEaseBackup is a single Go process that backs up PostgreSQL on a cron schedule and uploads each backup to Google Drive or an S3-compatible bucket. It runs as a container or a plain binary next to your database, keeps no state of its own, and exposes health endpoints for your orchestrator.
+DBEaseBackup is a single Go process that backs up databases on a cron schedule and uploads each backup to Google Drive or an S3-compatible bucket. PostgreSQL is the supported engine today; support for more engines is planned. It runs as a container or a plain binary next to your database, keeps no state of its own, and exposes health endpoints for your orchestrator.
 
 ## What it does
 
@@ -34,7 +34,7 @@ Timestamps in filenames use the layout `20060102T150405Z`, for example `app-db_d
 > [!NOTE]
 > These limits are intentional. Knowing them up front helps you decide whether DBEaseBackup fits.
 
-- **PostgreSQL only.** Other engines are not supported yet.
+- **PostgreSQL only, for now.** Other engines are planned but not available in any release yet.
 - **No point-in-time recovery.** There is no continuous WAL archiving. `basebackup` streams only the WAL needed to make that copy consistent.
 - **No restore command.** Restores use the standard PostgreSQL tools. See [Restoring](/docs/restoring/).
 - **No client-side encryption.** Files are uploaded as produced; rely on the storage provider's encryption at rest. See [Security](/docs/security/).

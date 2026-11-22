@@ -90,6 +90,13 @@ func (b *Builder) run() error {
 	if err := b.copyAssets(); err != nil {
 		return fmt.Errorf("copy assets: %w", err)
 	}
+	if err := b.bundleCSS(); err != nil {
+		return fmt.Errorf("bundle css: %w", err)
+	}
+
+	if err := b.renderStyleguide(); err != nil {
+		return err
+	}
 
 	landing := &Page{
 		Site:        b.site,

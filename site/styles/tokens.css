@@ -49,6 +49,8 @@
   --color-secondary: #4e535c;
   --color-muted: #63676f;
   --color-on-accent: #ffffff;
+  /* Modal backdrop: ink at 32% */
+  --color-backdrop: rgb(27 30 36 / 0.32);
 
   /* The single accent: actions, links, focus, icon strokes. */
   --color-accent: #b4441c;

@@ -107,6 +107,10 @@ func TestRenderDocHeadingsAndTOC(t *testing.T) {
 	if len(doc.Blocks) != 4 || !strings.Contains(doc.Blocks[0].Text, "Intro paragraph") || !strings.Contains(doc.Blocks[2].Text, "name: app-db") {
 		t.Errorf("text blocks = %+v", doc.Blocks)
 	}
+	// Table cells must not run together in search text.
+	if !strings.Contains(doc.Blocks[1].Text, "Field Default retries 2") {
+		t.Errorf("table text not separated: %q", doc.Blocks[1].Text)
+	}
 }
 
 func TestRenderDocGolden(t *testing.T) {

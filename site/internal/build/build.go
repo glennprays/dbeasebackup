@@ -102,6 +102,10 @@ func (b *Builder) run() error {
 	if err := b.loadDocs(); err != nil {
 		return err
 	}
+	// The index only needs the parsed docs; pages embed its hashed URL.
+	if err := b.writeSearchIndex(); err != nil {
+		return err
+	}
 	if err := b.renderDocs(); err != nil {
 		return err
 	}
@@ -188,6 +192,14 @@ func (b *Builder) funcs() template.FuncMap {
 				return "", fmt.Errorf("unknown asset %s", u)
 			}
 			return u + "?v=" + h, nil
+		},
+		// searchIndex returns the cache-busted URL of the docs search index.
+		"searchIndex": func() (string, error) {
+			h, ok := b.site.assets[SearchIndexPath]
+			if !ok {
+				return "", fmt.Errorf("search index not written yet")
+			}
+			return SearchIndexPath + "?v=" + h, nil
 		},
 	}
 }

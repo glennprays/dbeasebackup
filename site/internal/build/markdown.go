@@ -154,6 +154,10 @@ func nodeText(n ast.Node, src []byte) string {
 		if !entering {
 			return ast.WalkContinue, nil
 		}
+		// Separate block-level nodes (paragraphs, list items, table cells).
+		if c.Type() == ast.TypeBlock && b.Len() > 0 {
+			b.WriteByte(' ')
+		}
 		switch t := c.(type) {
 		case *ast.Text:
 			b.Write(t.Segment.Value(src))
@@ -170,10 +174,6 @@ func nodeText(n ast.Node, src []byte) string {
 			}
 			b.WriteByte(' ')
 			return ast.WalkSkipChildren, nil
-		case *ast.Paragraph, *ast.ListItem, *ast.TextBlock:
-			if b.Len() > 0 {
-				b.WriteByte(' ')
-			}
 		}
 		return ast.WalkContinue, nil
 	})

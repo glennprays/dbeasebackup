@@ -2,72 +2,11 @@ package testutils
 
 import (
 	"context"
-	"database/sql"
 	"io"
 
 	"github.com/glennprays/dbeasebackup/pkg/notifier"
 	"github.com/glennprays/dbeasebackup/pkg/storage"
 )
-
-// MockDatabase implements database.Database interface
-type MockDatabase struct {
-	ConnectFunc  func(ctx context.Context) error
-	CloseFunc    func() error
-	PingFunc     func(ctx context.Context) error
-	ExecFunc     func(ctx context.Context, query string, args ...any) (sql.Result, error)
-	QueryFunc    func(ctx context.Context, query string, args ...any) (*sql.Rows, error)
-	QueryRowFunc func(ctx context.Context, query string, args ...any) *sql.Row
-	GetDBFunc    func() *sql.DB
-}
-
-func (m *MockDatabase) Connect(ctx context.Context) error {
-	if m.ConnectFunc != nil {
-		return m.ConnectFunc(ctx)
-	}
-	return nil
-}
-
-func (m *MockDatabase) Close() error {
-	if m.CloseFunc != nil {
-		return m.CloseFunc()
-	}
-	return nil
-}
-
-func (m *MockDatabase) Ping(ctx context.Context) error {
-	if m.PingFunc != nil {
-		return m.PingFunc(ctx)
-	}
-	return nil
-}
-
-func (m *MockDatabase) Exec(ctx context.Context, query string, args ...any) (sql.Result, error) {
-	if m.ExecFunc != nil {
-		return m.ExecFunc(ctx, query, args...)
-	}
-	return nil, nil
-}
-
-func (m *MockDatabase) Query(ctx context.Context, query string, args ...any) (*sql.Rows, error) {
-	if m.QueryFunc != nil {
-		return m.QueryFunc(ctx, query, args...)
-	}
-	return nil, nil
-}
-
-func (m *MockDatabase) QueryRow(ctx context.Context, query string, args ...any) *sql.Row {
-	if m.QueryRowFunc != nil {
-		return m.QueryRowFunc(ctx, query, args...)
-	}
-	return nil
-}
-
-func (m *MockDatabase) GetDB() *sql.DB {
-	if m.GetDBFunc != nil {
-		return m.GetDBFunc()
-	}
-	return nil
-}
 
 // MockStorage implements storage.Storage interface
 type MockStorage struct {

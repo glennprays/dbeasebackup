@@ -12,20 +12,23 @@ import (
 	"github.com/glennprays/log"
 )
 
-// Server provides health check HTTP endpoint
+// Server provides health check HTTP endpoints
 type Server struct {
-	backupService *backup.Service
+	services     []*backup.Service
 	server       *http.Server
 	logger       *log.Logger
 	ready        bool
 	mu           sync.RWMutex
 }
 
-// NewServer creates a new health check server
-func NewServer(backupService *backup.Service, logger *log.Logger) *Server {
+// NewServer creates a new health check server over all target services.
+// /health gates on storage reachability only; per-target run statuses are
+// informational fields (last error surfaces in the body, not the status
+// code, so a single failed run does not flap K8s probes).
+func NewServer(services []*backup.Service, logger *log.Logger) *Server {
 	return &Server{
-		backupService: backupService,
-		logger:       logger,
+		services: services,
+		logger:   logger,
 	}
 }
 
@@ -109,18 +112,27 @@ func (s *Server) handleLivez(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]any{"alive": true})
 }
 
-// checkHealth performs health checks on dependencies
+// checkHealth gates on storage reachability; per-target statuses ride along
+// as informational fields.
 func (s *Server) checkHealth(ctx context.Context) HealthStatus {
 	var issues []string
 
-	// Check database health
-	if err := s.backupService.Health(ctx); err != nil {
-		issues = append(issues, fmt.Sprintf("database: %v", err))
+	// Storage is shared across targets; check it once via the first service.
+	if len(s.services) > 0 {
+		if err := s.services[0].Health(ctx); err != nil {
+			issues = append(issues, fmt.Sprintf("storage: %v", err))
+		}
+	}
+
+	statuses := make([]backup.TargetStatus, 0, len(s.services))
+	for _, svc := range s.services {
+		statuses = append(statuses, svc.Status())
 	}
 
 	return HealthStatus{
-		Healthy: len(issues) == 0,
-		Issues:  issues,
+		Healthy:     len(issues) == 0,
+		Issues:      issues,
+		Targets:     statuses,
 	}
 }
 
@@ -140,8 +152,9 @@ func (s *Server) isReady() bool {
 
 // HealthStatus represents the result of a health check
 type HealthStatus struct {
-	Healthy bool     `json:"healthy"`
-	Issues  []string `json:"issues,omitempty"`
+	Healthy bool                  `json:"healthy"`
+	Issues  []string              `json:"issues,omitempty"`
+	Targets []backup.TargetStatus `json:"targets"`
 }
 
 // writeJSON writes a JSON response with status code

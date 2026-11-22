@@ -12,18 +12,28 @@ import (
 	"github.com/glennprays/dbeasebackup/internal/backup"
 	"github.com/glennprays/dbeasebackup/internal/health"
 	backupprovider "github.com/glennprays/dbeasebackup/pkg/backup"
-	"github.com/glennprays/dbeasebackup/pkg/database"
 	"github.com/glennprays/dbeasebackup/pkg/notifier"
 	"github.com/glennprays/dbeasebackup/pkg/scheduler"
 	"github.com/glennprays/dbeasebackup/pkg/storage"
 	"github.com/glennprays/log"
 )
 
+// defaultCleanupCron is the fallback cleanup schedule when CLEANUP_CRON_SCHEDULE
+// is unset and targets did not come from the legacy env fallback.
+const defaultCleanupCron = "0 3 * * *"
+
 func main() {
 	// Load configuration using viper
 	cfg, err := config.ProvideConfig()
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Failed to load configuration: %v\n", err)
+		os.Exit(1)
+	}
+
+	// Resolve targets: TARGETS_FILE, else legacy env fallback.
+	targets, fromLegacy, err := config.LoadTargetsOrDefault(cfg)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Failed to resolve backup targets: %v\n", err)
 		os.Exit(1)
 	}
 
@@ -38,66 +48,17 @@ func main() {
 	traceID := "main-init"
 	logger.Info(traceID, "Starting DBEaseBackup", nil,
 		log.String("env", cfg.ENV),
-		log.String("backup_provider", cfg.BACKUP_PROVIDER),
 		log.String("storage_type", cfg.STORAGE_TYPE),
+		log.Int("targets", len(targets)),
+		log.Int("max_parallel_backups", cfg.MAX_PARALLEL_BACKUPS),
 	)
 
-	// Initialize database
-	db := database.NewPostgresDatabase(cfg, logger)
-	if err := db.Connect(context.Background()); err != nil {
-		logger.Error(traceID, "Failed to connect to database", nil, log.Error(err))
-		os.Exit(1)
-	}
-	defer db.Close()
-
-	logger.Info(traceID, "Database connected", nil)
-
-	// Validate database connection
-	if err := db.Ping(context.Background()); err != nil {
-		logger.Error(traceID, "Database connection validation failed", nil,
-			log.Error(err),
-			log.String("host", cfg.PG_HOST),
-			log.String("port", cfg.PG_PORT),
-			log.String("database", cfg.PG_DATABASE),
-			log.String("user", cfg.PG_USER),
-		)
-		os.Exit(1)
-	}
-
-	logger.Info(traceID, "Database connection validated", nil,
-		log.String("host", cfg.PG_HOST),
-		log.String("port", cfg.PG_PORT),
-		log.String("database", cfg.PG_DATABASE),
-	)
-
-	// Initialize backup provider
-	backupProvider, err := initializeBackupProvider(cfg, logger)
-	if err != nil {
-		logger.Error(traceID, "Failed to initialize backup provider", nil, log.Error(err))
-		os.Exit(1)
-	}
-
-	logger.Info(traceID, "Backup provider initialized", nil,
-		log.String("provider", backupProvider.Name()),
-	)
-
-	// Validate backup provider dependencies
-	if err := backupProvider.ValidateDependencies(); err != nil {
-		logger.Error(traceID, "Backup provider dependency validation failed", nil, log.Error(err))
-		os.Exit(1)
-	}
-
-	logger.Info(traceID, "Backup provider dependencies validated", nil,
-		log.String("provider", backupProvider.Name()),
-	)
-
-	// Initialize storage
+	// Initialize storage (once; credentials are global)
 	storageProvider, err := initializeStorage(context.Background(), cfg, logger)
 	if err != nil {
 		logger.Error(traceID, "Failed to initialize storage", nil, log.Error(err))
 		os.Exit(1)
 	}
-
 	logger.Info(traceID, "Storage initialized", nil)
 
 	// Initialize webhook notifier (disabled when WEBHOOK_URL is empty)
@@ -113,22 +74,58 @@ func main() {
 		)
 	}
 
-	// Initialize backup service
-	backupService, err := backup.NewService(db, storageProvider, backupProvider, cfg, logger, webhookNotifier)
-	if err != nil {
-		logger.Error(traceID, "Failed to initialize backup service", nil, log.Error(err))
-		os.Exit(1)
+	// Per-target services and runners, backed by a shared concurrency pool.
+	sem := make(chan struct{}, max(1, cfg.MAX_PARALLEL_BACKUPS))
+	services := make([]*backup.Service, 0, len(targets))
+	runners := make([]*backup.Runner, 0, len(targets))
+
+	for i := range targets {
+		target := &targets[i]
+
+		provider, err := backupprovider.NewProviderFor(target, logger)
+		if err != nil {
+			logger.Error(traceID, "Failed to create backup provider", nil,
+				log.Error(err),
+				log.String("target", target.Name),
+			)
+			os.Exit(1)
+		}
+
+		if err := provider.ValidateDependencies(); err != nil {
+			logger.Error(traceID, "Backup provider dependency validation failed", nil,
+				log.Error(err),
+				log.String("target", target.Name),
+				log.String("mode", target.Mode),
+			)
+			os.Exit(1)
+		}
+
+		svc, err := backup.NewService(storageProvider, provider, target, logger, webhookNotifier)
+		if err != nil {
+			logger.Error(traceID, "Failed to initialize backup service", nil,
+				log.Error(err),
+				log.String("target", target.Name),
+			)
+			os.Exit(1)
+		}
+
+		runners = append(runners, backup.NewRunner(svc, target, sem, logger, webhookNotifier))
+		services = append(services, svc)
+
+		logger.Info(traceID, "Target configured", nil,
+			log.String("target", target.Name),
+			log.String("mode", target.Mode),
+			log.String("schedule", target.Schedule),
+			log.String("backup_dir", target.BackupDir),
+		)
 	}
 
-	logger.Info(traceID, "Backup service initialized", nil)
-
 	// Initialize health check server
-	healthServer := health.NewServer(backupService, logger)
+	healthServer := health.NewServer(services, logger)
 	if err := healthServer.Start(cfg.HTTP_PORT); err != nil {
 		logger.Error(traceID, "Failed to start health server", nil, log.Error(err))
 		os.Exit(1)
 	}
-
 	logger.Info(traceID, "Health check server started", nil,
 		log.Int("port", cfg.HTTP_PORT),
 	)
@@ -140,26 +137,35 @@ func main() {
 		os.Exit(1)
 	}
 
-	// Add backup job to scheduler
-	if err := cronScheduler.AddJob(cfg.CRON_SCHEDULE, backupService); err != nil {
-		logger.Error(traceID, "Failed to add backup job", nil, log.Error(err))
-		os.Exit(1)
-	}
+	// Per-target backup + cleanup jobs.
+	for i := range runners {
+		target := &targets[i]
+		if err := cronScheduler.AddJob(target.Schedule, runners[i]); err != nil {
+			logger.Error(traceID, "Failed to add backup job", nil,
+				log.Error(err),
+				log.String("target", target.Name),
+			)
+			os.Exit(1)
+		}
 
-	// Add cleanup job
-	cleanupJob := backup.NewCleanupJob(backupService)
-	cleanupSchedule := cfg.CLEANUP_CRON_SCHEDULE
-	if cleanupSchedule == "" {
-		cleanupSchedule = cfg.CRON_SCHEDULE
-	}
-	if err := cronScheduler.AddJob(cleanupSchedule, cleanupJob); err != nil {
-		logger.Error(traceID, "Failed to add cleanup job", nil, log.Error(err))
-		os.Exit(1)
+		cleanupJob := backup.NewCleanupJob(services[i])
+		cleanupSchedule := resolveCleanupSchedule(cfg, fromLegacy)
+		if err := cronScheduler.AddJob(cleanupSchedule, cleanupJob); err != nil {
+			logger.Error(traceID, "Failed to add cleanup job", nil,
+				log.Error(err),
+				log.String("target", target.Name),
+			)
+			os.Exit(1)
+		}
+
+		logger.Info(traceID, "Jobs scheduled", nil,
+			log.String("target", target.Name),
+			log.String("backup_schedule", target.Schedule),
+			log.String("cleanup_schedule", cleanupSchedule),
+		)
 	}
 
 	logger.Info(traceID, "Scheduler configured", nil,
-		log.String("backup_schedule", cfg.CRON_SCHEDULE),
-		log.String("cleanup_schedule", cleanupSchedule),
 		log.String("timezone", cfg.SCHEDULER_TIMEZONE),
 	)
 
@@ -175,21 +181,17 @@ func main() {
 	waitForShutdown(logger, cronScheduler, healthServer)
 }
 
-// initializeBackupProvider creates the appropriate backup provider based on configuration
-func initializeBackupProvider(cfg *config.Config, logger *log.Logger) (backupprovider.Provider, error) {
-	switch cfg.BACKUP_PROVIDER {
-	case "postgres":
-		pgConfig := backupprovider.PostgresConfig{
-			Host:     cfg.PG_HOST,
-			Port:     cfg.PG_PORT,
-			User:     cfg.PG_USER,
-			Password: cfg.PG_PASSWORD,
-			Database: cfg.PG_DATABASE,
-		}
-		return backupprovider.NewPostgresProvider(pgConfig, logger, cfg.GetBackupTimeout()), nil
-	default:
-		return nil, fmt.Errorf("unsupported backup provider: %s", cfg.BACKUP_PROVIDER)
+// resolveCleanupSchedule resolves the cleanup cron: CLEANUP_CRON_SCHEDULE if
+// set; else the legacy CRON_SCHEDULE when targets came from legacy env; else
+// the daily 03:00 default.
+func resolveCleanupSchedule(cfg *config.Config, fromLegacy bool) string {
+	if cfg.CLEANUP_CRON_SCHEDULE != "" {
+		return cfg.CLEANUP_CRON_SCHEDULE
 	}
+	if fromLegacy && cfg.CRON_SCHEDULE != "" {
+		return cfg.CRON_SCHEDULE
+	}
+	return defaultCleanupCron
 }
 
 // initializeStorage creates the appropriate storage provider based on configuration

@@ -1,0 +1,73 @@
+# DBEaseBackup targets file (YAML; JSON also accepted, chosen by extension)
+#
+# Each target backs up one PostgreSQL database (mode: dump) or one whole
+# cluster (mode: basebackup) on its own schedule with its own retention.
+#
+# Field reference:
+#   name           (required) ^[a-z0-9][a-z0-9-]{0,62}$, unique
+#   mode           dump | basebackup            (default: dump)
+#   host, port, user, password                    (connection)
+#   password_env  env var name holding the password; wins over `password`
+#   database      required for dump; must be empty for basebackup
+#   sslmode       disable | require | verify-ca | verify-full  (default: disable)
+#   schedule      (required) standard cron expression
+#   timeout       Go duration                   (default: 30m)
+#   retention_days int                          (default: 30; 0 = keep forever)
+#   verify        bool                          (default: true)
+#   retries       int                            (default: 2; 0 = no retry;
+#                 backoff 30s, then 2m, capped at 2m)
+#   backup_dir    local staging dir             (default: backups/<name>)
+#   storage       per-target placement overrides (Drive folder / S3 prefix)
+#
+# Notes:
+# - mode: basebackup requires a user with REPLICATION privilege and a
+#   pg_hba.conf rule allowing replication from this host. Client tools
+#   >= 13 required (pg_basebackup + pg_verifybackup). Peak local disk usage
+#   is ~2x the cluster size during archiving.
+# - mode: dump uses pg_dump custom format (-F c) and is verified after
+#   upload with pg_restore --list (warn only; does not fail the run).
+# - Filenames are <name>_<mode>_<UTC timestamp>.<ext>; retention scans
+#   storage by filename, so do not rename uploaded files.
+
+targets:
+  - name: app-db
+    mode: dump
+    host: localhost
+    port: "5432"
+    user: postgres
+    password_env: APP_DB_PASSWORD   # or password: literal
+    database: appdb
+    sslmode: disable
+    schedule: "0 2 * * *"           # daily at 02:00
+    timeout: 45m
+    retention_days: 30
+    verify: true
+    retries: 2
+    backup_dir: backups/app-db
+    storage:
+      folder_id: "1AbCdEfGhIjKlMnOpQrStUvWxYz"   # Google Drive folder (Drive mode)
+      prefix: "app"                              # extra S3 key segment (S3 mode)
+
+  - name: etl-db
+    mode: dump
+    host: db.internal
+    port: "5432"
+    user: postgres
+    password: changeme
+    database: warehouse
+    schedule: "0 */6 * * *"          # every 6 hours
+    retention_days: 14
+    verify: true
+
+  - name: prod-cluster
+    mode: basebackup
+    host: db.internal
+    port: "5432"
+    user: replication
+    password_env: REPL_PASSWORD
+    schedule: "0 4 * * 0"            # weekly, Sunday 04:00
+    timeout: 2h
+    retention_days: 7
+    verify: true                     # pg_verifybackup runs BEFORE upload
+    retries: 2
+    backup_dir: backups/prod-cluster

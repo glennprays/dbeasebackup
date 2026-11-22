@@ -11,6 +11,7 @@ import (
 	"github.com/glennprays/dbeasebackup/pkg/traceid"
 	"github.com/glennprays/log"
 	"google.golang.org/api/drive/v3"
+	"google.golang.org/api/googleapi"
 	"google.golang.org/api/option"
 )
 
@@ -79,7 +80,10 @@ func (g *GoogleDriveStorage) Upload(ctx context.Context, file io.Reader, filenam
 		driveFile.Parents = []string{opts.FolderID}
 	}
 
-	_, err := g.service.Files.Create(driveFile).Media(file).Context(ctx).Do()
+	// Explicit 8 MiB chunk (multiple of the required 256 KiB) bounds the
+	// resumable-upload buffer deterministically instead of relying on SDK
+	// defaults that may buffer the whole file.
+	_, err := g.service.Files.Create(driveFile).Media(file, googleapi.ChunkSize(8<<20)).Context(ctx).Do()
 	if err != nil {
 		g.logger.Error(traceID, "Failed to upload file to Google Drive", nil,
 			log.Error(err),

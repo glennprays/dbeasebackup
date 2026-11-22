@@ -18,9 +18,6 @@ type Config struct {
 	// App
 	ENV string `mapstructure:"ENV" default:"production"`
 
-	// Backup Provider
-	BACKUP_PROVIDER string `mapstructure:"BACKUP_PROVIDER" default:"postgres"`
-
 	// Storage Type
 	STORAGE_TYPE string `mapstructure:"STORAGE_TYPE" default:"google-drive"`
 
@@ -46,6 +43,10 @@ type Config struct {
 	CRON_SCHEDULE          string `mapstructure:"CRON_SCHEDULE" default:""`
 	CLEANUP_CRON_SCHEDULE  string `mapstructure:"CLEANUP_CRON_SCHEDULE" default:""`
 	SCHEDULER_TIMEZONE     string `mapstructure:"SCHEDULER_TIMEZONE" default:"UTC"`
+
+	// Multi-target
+	TARGETS_FILE        string `mapstructure:"TARGETS_FILE" default:""`
+	MAX_PARALLEL_BACKUPS int  `mapstructure:"MAX_PARALLEL_BACKUPS" default:"1"`
 
 	// Logging
 	LOG_LEVEL  string `mapstructure:"LOG_LEVEL" default:"info"`
@@ -125,71 +126,29 @@ func ProvideConfig() (*Config, error) {
 	return &cfg, nil
 }
 
-// Validate checks that all required configuration values are set
+// Validate checks global configuration values. Per-target concerns
+// (connection, schedule, mode) are validated on the Target itself; legacy
+// PG_*/CRON_SCHEDULE requirements are enforced only by the legacy env
+// fallback (targetsFromEnv).
 func (c *Config) Validate() error {
-	// Validate backup provider
-	validBackupProviders := map[string]bool{
-		"postgres": true,
-	}
-	if !validBackupProviders[c.BACKUP_PROVIDER] {
-		return fmt.Errorf("invalid BACKUP_PROVIDER: %s (valid: postgres)", c.BACKUP_PROVIDER)
-	}
-
-	// Validate storage type
-	validStorageTypes := map[string]bool{
-		"google-drive": true,
-		"s3":           true,
-	}
-	if !validStorageTypes[c.STORAGE_TYPE] {
-		return fmt.Errorf("invalid STORAGE_TYPE: %s (valid: google-drive, s3)", c.STORAGE_TYPE)
-	}
-
-	// PostgreSQL provider validation
-	if c.BACKUP_PROVIDER == "postgres" {
-		if c.PG_HOST == "" {
-			return fmt.Errorf("PG_HOST environment variable is required")
+	// Validate storage type (empty = unset; resolved at storage init)
+	if c.STORAGE_TYPE != "" {
+		validStorageTypes := map[string]bool{
+			"google-drive": true,
+			"s3":           true,
 		}
-		if c.PG_PORT == "" {
-			return fmt.Errorf("PG_PORT environment variable is required")
-		}
-		if c.PG_USER == "" {
-			return fmt.Errorf("PG_USER environment variable is required")
-		}
-		if c.PG_PASSWORD == "" {
-			return fmt.Errorf("PG_PASSWORD environment variable is required")
-		}
-		if c.PG_DATABASE == "" {
-			return fmt.Errorf("PG_DATABASE environment variable is required")
-		}
-		validSSLModes := map[string]bool{
-			"disable": true, "require": true, "verify-ca": true, "verify-full": true,
-		}
-		if !validSSLModes[c.PG_SSLMODE] {
-			return fmt.Errorf("invalid PG_SSLMODE: %s (valid: disable, require, verify-ca, verify-full)", c.PG_SSLMODE)
+		if !validStorageTypes[c.STORAGE_TYPE] {
+			return fmt.Errorf("invalid STORAGE_TYPE: %s (valid: google-drive, s3)", c.STORAGE_TYPE)
 		}
 	}
 
-	if c.CRON_SCHEDULE == "" {
-		return fmt.Errorf("CRON_SCHEDULE environment variable is required")
-	}
+	// Storage type specific validation is per-deployment, not per-target:
+	// credentials are checked at storage init, placement is per-target.
+	// PG_*/CRON_SCHEDULE/GOOGLE_DRIVE_FOLDER_ID are only required through the
+	// legacy env fallback (see targetsFromEnv).
 
-	// Storage type specific validation
-	if c.STORAGE_TYPE == "google-drive" {
-		if c.GOOGLE_DRIVE_FOLDER_ID == "" {
-			return fmt.Errorf("GOOGLE_DRIVE_FOLDER_ID environment variable is required when STORAGE_TYPE=google-drive")
-		}
-	}
-
-	if c.STORAGE_TYPE == "s3" {
-		if c.S3_BUCKET == "" {
-			return fmt.Errorf("S3_BUCKET environment variable is required when STORAGE_TYPE=s3")
-		}
-		if c.S3_ACCESS_KEY_ID == "" {
-			return fmt.Errorf("S3_ACCESS_KEY_ID environment variable is required when STORAGE_TYPE=s3")
-		}
-		if c.S3_SECRET_ACCESS_KEY == "" {
-			return fmt.Errorf("S3_SECRET_ACCESS_KEY environment variable is required when STORAGE_TYPE=s3")
-		}
+	if c.MAX_PARALLEL_BACKUPS < 0 {
+		return fmt.Errorf("MAX_PARALLEL_BACKUPS must be >= 0, got %d", c.MAX_PARALLEL_BACKUPS)
 	}
 
 	// Validate log level
